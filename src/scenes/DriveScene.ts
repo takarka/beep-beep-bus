@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { audio } from '../audio/AudioEngine';
 import { BusView } from '../bus/BusView';
-import { DEFAULT_DESIGN, loadDesign } from '../bus/design';
+import { DEFAULT_DESIGN } from '../bus/design';
+import { loadDesign } from '../bus/garage';
 import { DRIVE_SCALE } from '../bus/geometry';
 import { getSettings, updateSettings } from '../core/settings';
 import { C, GAME_H, GAME_W } from '../config';
@@ -464,7 +465,7 @@ export class DriveScene extends Phaser.Scene {
       const resume = new Button(this, cx, 395, { r: 68, color: C.green, icon: (g, s) => Icons.play(g, s), onClick: () => this.setPaused(false) });
       const retry = new Button(this, cx - 160, 405, { r: 46, color: C.orange, icon: (g, s) => Icons.retry(g, s), onClick: () => this.scene.restart({ level: this.level.level }) });
       const home = new Button(this, cx - 290, 405, { r: 46, color: C.red, icon: (g, s) => Icons.home(g, s), onClick: () => this.scene.start('Menu') });
-      const edit = new Button(this, cx + 160, 405, { r: 46, color: C.purple, icon: (g, s) => Icons.bus(g, s), onClick: () => this.scene.start('Factory') });
+      const edit = new Button(this, cx + 160, 405, { r: 46, color: C.purple, icon: (g, s) => Icons.bus(g, s), onClick: () => this.scene.start('Garage') });
       const helper: Button = new Button(this, cx + 290, 405, {
         r: 46,
         color: this.assist ? C.green : 0xb9b0a0,
@@ -476,7 +477,7 @@ export class DriveScene extends Phaser.Scene {
         },
       });
       const helperLabel = label(this, cx + 290, 484, t('assist'), { size: 20, color: C.ink, strokeThickness: 0, wrap: 120 });
-      const editLabel = label(this, cx + 160, 484, t('myBus'), { size: 20, color: C.ink, strokeThickness: 0, wrap: 120 });
+      const editLabel = label(this, cx + 160, 484, t('garage'), { size: 20, color: C.ink, strokeThickness: 0, wrap: 120 });
       layer.add([dim, panel, title, resume, retry, home, edit, helper, helperLabel, editLabel]);
       // Children need scrollFactor 0 too, otherwise their hit areas shift with the camera.
       layer.setScrollFactor(0, 0, true);

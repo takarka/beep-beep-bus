@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { audio } from '../audio/AudioEngine';
 import { BusView } from '../bus/BusView';
-import { DEFAULT_DESIGN, loadDesign } from '../bus/design';
+import { DEFAULT_DESIGN } from '../bus/design';
+import { loadDesign } from '../bus/garage';
 import { DRIVE_SCALE } from '../bus/geometry';
 import { C, GAME_W } from '../config';
 import { recordResult } from '../core/progress';
@@ -85,7 +86,7 @@ export class ResultScene extends Phaser.Scene {
 
     // Buttons
     new Button(this, cx - 210, 470, { r: 42, color: C.red, icon: (g, s) => Icons.home(g, s), onClick: () => this.scene.start('Menu') });
-    new Button(this, cx - 100, 470, { r: 42, color: C.purple, icon: (g, s) => Icons.bus(g, s), onClick: () => this.scene.start('Factory') });
+    new Button(this, cx - 100, 470, { r: 42, color: C.purple, icon: (g, s) => Icons.bus(g, s), onClick: () => this.scene.start('Garage') });
     new Button(this, cx + 10, 470, { r: 42, color: C.orange, icon: (g, s) => Icons.retry(g, s), onClick: () => this.scene.start('Drive', { level: r.level }) });
     const next = new Button(this, cx + 180, 466, {
       w: 200,

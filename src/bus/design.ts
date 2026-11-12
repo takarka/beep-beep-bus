@@ -1,5 +1,3 @@
-import { loadJSON, saveJSON } from '../core/storage';
-
 export const BODY_TYPES = ['city', 'bendy', 'double', 'school'] as const;
 export const DOOR_COUNTS = [1, 2, 3] as const;
 export const WHEEL_TYPES = ['classic', 'sport', 'big', 'retro'] as const;
@@ -64,15 +62,4 @@ export function sanitizeDesign(raw: unknown): BusDesign {
     decor: oneOf(DECOR_TYPES, r.decor, DEFAULT_DESIGN.decor),
     number: normalizeNumber(r.number),
   };
-}
-
-const KEY = 'bbbus.design.v1';
-
-export function loadDesign(): BusDesign | null {
-  const raw = loadJSON(KEY);
-  return raw ? sanitizeDesign(raw) : null;
-}
-
-export function saveDesign(d: BusDesign): void {
-  saveJSON(KEY, sanitizeDesign(d));
 }

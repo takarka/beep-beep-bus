@@ -43,7 +43,11 @@ Yellow is not penalized (the child is still learning). A yellow light never turn
 
 ## Bus types
 
-City, **articulated "accordion" bus**, double-decker and school bus (with a hood). Saves from the old "long" bus are converted to the articulated one automatically. The bus can be edited at any time: **«Мой автобус» / "My bus"** in the menu, the bus button in the pause screen and on the results screen, and the green ▶ in the factory starts the route from any step.
+City, **articulated "accordion" bus**, double-decker and school bus (with a hood). Saves from the old "long" bus are converted to the articulated one automatically. The bus can be edited at any time through the garage (menu, pause and results screens); the green ▶ in the factory starts the route from any step.
+
+## Garage: up to 3 saved buses
+
+«Гараж» / "Garage" (menu, pause and results screens) keeps **up to three buses at once**. Tap a card to make that bus the driver, ▶ drives with it, ✏️ edits it, ✕ deletes it (tap twice, so a small finger can't delete by accident), **+** builds a new one in an empty place. A bus saved before the garage existed moves into place 1 automatically.
 
 ## Install as an app / fullscreen
 

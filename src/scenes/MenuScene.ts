@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { audio } from '../audio/AudioEngine';
 import { BusView } from '../bus/BusView';
-import { DEFAULT_DESIGN, loadDesign } from '../bus/design';
+import { DEFAULT_DESIGN } from '../bus/design';
+import { loadDesign } from '../bus/garage';
 import { DRIVE_SCALE } from '../bus/geometry';
 import { C, GAME_W } from '../config';
 import { loadProgress } from '../core/progress';
@@ -84,9 +85,9 @@ export class MenuScene extends Phaser.Scene {
       r: 62,
       color: C.purple,
       icon: (g, s) => Icons.bus(g, s),
-      onClick: () => this.go('Factory'),
+      onClick: () => this.go('Garage'),
     });
-    label(this, 190, 290 + 94, t('myBus'), { size: 28 });
+    label(this, 190, 290 + 94, t('garage'), { size: 28 });
 
     // Language badges
     LANGS.forEach((lang, i) => {

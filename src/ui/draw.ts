@@ -100,6 +100,31 @@ export const Icons = {
     const ay = Math.sin(-2.6) * s * 0.27;
     g.fillTriangle(ax - s * 0.17, ay - s * 0.02, ax + s * 0.13, ay - s * 0.14, ax + s * 0.05, ay + s * 0.18);
   },
+  plus(g: G, s: number, color: number = C.cream) {
+    g.fillStyle(color, 1);
+    g.fillRoundedRect(-s * 0.3, -s * 0.07, s * 0.6, s * 0.14, s * 0.05);
+    g.fillRoundedRect(-s * 0.07, -s * 0.3, s * 0.14, s * 0.6, s * 0.05);
+  },
+  cross(g: G, s: number, color: number = C.cream) {
+    g.lineStyle(s * 0.14, color, 1);
+    g.lineBetween(-s * 0.24, -s * 0.24, s * 0.24, s * 0.24);
+    g.lineBetween(-s * 0.24, s * 0.24, s * 0.24, -s * 0.24);
+  },
+  pencil(g: G, s: number, color: number = C.cream) {
+    g.fillStyle(color, 1);
+    g.fillPoints(
+      [
+        new Phaser.Math.Vector2(-s * 0.3, s * 0.3),
+        new Phaser.Math.Vector2(-s * 0.26, s * 0.1),
+        new Phaser.Math.Vector2(s * 0.18, -s * 0.34),
+        new Phaser.Math.Vector2(s * 0.34, -s * 0.18),
+        new Phaser.Math.Vector2(-s * 0.1, s * 0.26),
+      ],
+      true,
+    );
+    g.fillStyle(C.ink, 0.35);
+    g.fillTriangle(-s * 0.3, s * 0.3, -s * 0.26, s * 0.1, -s * 0.1, s * 0.26);
+  },
   /** Car horn: a flared trumpet with sound waves. */
   horn(g: G, s: number, color: number = C.cream) {
     g.fillStyle(color, 1);

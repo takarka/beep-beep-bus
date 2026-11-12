@@ -16,6 +16,7 @@
 - Bus is editable from the menu, pause and results screens; ▶ shortcut in the factory
 - Horn button (beep-beep) on the screen
 - Helper mode (auto-brake), fullscreen button, PWA (home screen + offline)
+- Garage with up to 3 saved buses
 
 ## 🔜 Version 0.2: mobile and polish (remaining)
 
@@ -35,7 +36,6 @@
 
 ## 🎨 Version 0.4: garage and rewards
 
-- [ ] **Garage**: several saved buses, choose before the trip
 - [ ] Points unlock new parts: trolleybus, double-decker with an open roof, spoilers, horns, flags
 - [ ] Sticker album / achievements ("10 stops without mistakes")
 - [ ] Bus photo: save a picture of your bus
