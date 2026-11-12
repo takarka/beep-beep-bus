@@ -138,9 +138,9 @@ class AudioEngine {
 
   horn(): void {
     if (!this.live()) return;
-    for (const at of [0, 0.26]) {
-      this.tone({ freq: 349, dur: 0.2, type: 'square', vol: 0.07, at });
-      this.tone({ freq: 440, dur: 0.2, type: 'square', vol: 0.07, at });
+    for (const at of [0, 0.2]) {
+      this.tone({ freq: 440, dur: 0.14, type: 'square', vol: 0.07, at, attack: 0.004 });
+      this.tone({ freq: 554, dur: 0.14, type: 'square', vol: 0.07, at, attack: 0.004 });
     }
   }
 

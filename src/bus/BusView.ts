@@ -222,9 +222,10 @@ export class BusView extends Phaser.GameObjects.Container {
     // Roof unit (retro detail)
     g.fillStyle(shade(body, -0.1), 1);
     g.lineStyle(4, ink, 1);
-    const roofX = L.backX + boxW * 0.3;
-    g.fillRoundedRect(roofX, L.top - 14, boxW * 0.28, 18, { tl: 8, tr: 8, bl: 2, br: 2 });
-    g.strokeRoundedRect(roofX, L.top - 14, boxW * 0.28, 18, { tl: 8, tr: 8, bl: 2, br: 2 });
+    const roofX = L.joint ? L.joint.x1 + 60 : L.backX + boxW * 0.3;
+    const roofW = L.joint ? 140 : boxW * 0.28;
+    g.fillRoundedRect(roofX, L.top - 14, roofW, 18, { tl: 8, tr: 8, bl: 2, br: 2 });
+    g.strokeRoundedRect(roofX, L.top - 14, roofW, 18, { tl: 8, tr: 8, bl: 2, br: 2 });
 
     // Main body
     const radii = { tl: 18, tr: L.hood ? 14 : double ? 34 : 44, bl: 10, br: L.hood ? 4 : 14 };
@@ -265,6 +266,23 @@ export class BusView extends Phaser.GameObjects.Container {
     if (double) {
       g.lineStyle(3, bodyDark, 1);
       g.lineBetween(L.backX + 4, L.deckY as number, L.boxFrontX - 4, L.deckY as number);
+    }
+
+    // Accordion joint of the articulated bus: dark folded bellows between the two sections.
+    if (L.joint) {
+      const j = L.joint;
+      const jt = L.top + 3;
+      const jb = L.bottom - 3;
+      g.fillStyle(0x24212a, 1);
+      g.fillRoundedRect(j.x0, jt, j.x1 - j.x0, jb - jt, 8);
+      g.lineStyle(4, 0x58525f, 1);
+      for (let x = j.x0 + 8; x < j.x1 - 4; x += 8) g.lineBetween(x, jt + 8, x, jb - 8);
+      g.lineStyle(5, ink, 1);
+      g.strokeRoundedRect(j.x0, jt, j.x1 - j.x0, jb - jt, 8);
+      // rubber "roof" cap over the bellows
+      g.fillStyle(0x3b3640, 1);
+      g.fillRoundedRect(j.x0 - 4, L.top - 6, j.x1 - j.x0 + 8, 16, 6);
+      g.strokeRoundedRect(j.x0 - 4, L.top - 6, j.x1 - j.x0 + 8, 16, 6);
     }
 
     // Windows (glass)

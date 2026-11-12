@@ -43,6 +43,13 @@ async function start(): Promise<void> {
     scene: [BootScene, MenuScene, FactoryScene, DriveScene, ResultScene],
   });
 
+  // Offline support + "install to home screen" (production builds only)
+  if ('serviceWorker' in navigator && import.meta.env.PROD) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(() => undefined);
+    });
+  }
+
   // Expose for debugging and automated smoke tests.
   (window as unknown as { __game: Phaser.Game }).__game = game;
 }

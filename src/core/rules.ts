@@ -13,10 +13,19 @@ export const STOP_ZONE = {
   /** The front may be this far before the target line… */
   before: 230,
   /** …or this far past it, and it still counts as "at the stop". */
-  after: 50,
+  after: 100,
   /** Past this distance the stop counts as missed. */
-  miss: 140,
+  miss: 180,
 } as const;
+
+/** Bus physics in world px/s and px/s². Gentle on purpose: the players are 4 years old. */
+export const PHYSICS = { accel: 320, coast: 200, brake: 700 } as const;
+
+export const brakingDistance = (v: number): number => (v * v) / (2 * PHYSICS.brake);
+
+/** Can a bus moving at speed v still stop before the line (with a small safety margin)? */
+export const canStopBefore = (front: number, lineX: number, v: number): boolean =>
+  lineX - front >= brakingDistance(v) + 20;
 
 /** How far before a stop line counts as "waiting at the red light". */
 export const RED_WAIT_RANGE = 320;

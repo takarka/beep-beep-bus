@@ -165,6 +165,16 @@ export class FactoryScene extends Phaser.Scene {
 
     new Button(this, 56, 52, { r: 34, color: C.red, icon: (g, s) => Icons.home(g, s), onClick: () => this.scene.start('Menu') });
     addAudioToggles(this, GAME_W - 56, 52);
+    // Go driving straight away, from any step
+    new Button(this, GAME_W - 224, 52, {
+      r: 34,
+      color: C.green,
+      icon: (g, s) => Icons.play(g, s),
+      onClick: () => {
+        saveDesign(this.design);
+        this.scene.start('Drive', { level: loadProgress().level });
+      },
+    });
 
     this.backBtn = new Button(this, 70, 360, { r: 50, color: C.orange, icon: (g, s) => Icons.arrowLeft(g, s), onClick: () => this.showStep(this.stepIdx - 1) });
     this.nextBtn = new Button(this, GAME_W - 70, 360, { r: 56, color: C.green, icon: (g, s) => Icons.arrowRight(g, s), onClick: () => this.next() });
@@ -226,7 +236,10 @@ export class FactoryScene extends Phaser.Scene {
     const d = this.design;
     switch (step) {
       case 'body':
-        this.cards(BODY_TYPES, (v) => d.body === v, (v) => this.set({ body: v }), (c, v) => this.miniBus(c, { ...d, body: v }));
+        this.cards(BODY_TYPES, (v) => d.body === v, (v) => this.set({ body: v }), (c, v) => {
+          this.miniBus(c, { ...d, body: v }, -16);
+          c.add(label(this, 0, 52, t(`body_${v}` as TextKey), { size: 21, color: C.ink, strokeThickness: 0 }));
+        });
         break;
       case 'doors':
         this.cards(DOOR_COUNTS, (v) => d.doors === v, (v) => this.set({ doors: v }), (c, v) => this.miniBus(c, { ...d, doors: v }));
@@ -289,10 +302,10 @@ export class FactoryScene extends Phaser.Scene {
     });
   }
 
-  private miniBus(c: Phaser.GameObjects.Container, design: BusDesign): void {
+  private miniBus(c: Phaser.GameObjects.Container, design: BusDesign, dy = 0): void {
     const { L, H } = BODY_SIZE[design.body];
     const s = Math.min(196 / (L + 30), 118 / (H + 60));
-    const bus = new BusView(this, 0, (H + 40) * s * 0.5, design);
+    const bus = new BusView(this, 0, (H + 40) * s * 0.5 + dy, design);
     bus.setScale(s);
     c.add(bus);
   }

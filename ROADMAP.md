@@ -2,19 +2,25 @@
 
 ## ✅ Version 0.1: MVP (done)
 
-- Factory: 7 steps (body ×4, doors 1–3, wheels ×4, colour ×8, headlights ×4, stickers ×4, number 1–3 digits)
+- Factory: 7 steps (body ×4 incl. articulated, doors 1–3, wheels ×4, colour ×8, headlights ×4, stickers ×4, number 1–3 digits)
 - Route: smooth road, parallax city, bus stops with passengers, traffic lights with random timing
 - Points, a gentle "mistake" (no losing), stars at the end, endless levels (more stops and lights, higher speed)
 - 3 languages (ru/kk/en), synthesized sounds and music, sound/music toggles
 - Saved bus, unlocked level and stars (localStorage)
 - Desktop (keyboard + mouse) and touch (multi-touch pedals); landscape on phones with a "rotate your device" hint
 
-## 🔜 Version 0.2: mobile and polish
+## ✅ Version 0.2 (part 1, done)
+
+- Much more room between lights and stops, slower and gentler bus, fairer yellow light
+- Articulated ("accordion") bus; body types are labelled in the factory
+- Bus is editable from the menu, pause and results screens; ▶ shortcut in the factory
+- Horn button (beep-beep) on the screen
+- Helper mode (auto-brake), fullscreen button, PWA (home screen + offline)
+
+## 🔜 Version 0.2: mobile and polish (remaining)
 
 - [ ] Phone testing: button sizes, safe areas (notch), fullscreen on the first tap
-- [ ] PWA: install to the home screen, offline play (service worker)
 - [ ] **Voice prompts** in three languages (recorded files: "Stop!", "Bus stop!", "Well done!")
-- [ ] "Simple" mode for 3–4 year olds: one pedal, the bus brakes by itself at stops/red with a hint
 - [ ] Parent settings (behind a "hold for 3 seconds" gate): difficulty, reset progress
 - [ ] Animated passengers (walking, waving), a speech bubble with an icon of where they're going
 

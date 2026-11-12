@@ -9,13 +9,16 @@ import {
   sanitizeDesign,
 } from '../src/bus/design';
 import { computeLayout } from '../src/bus/geometry';
-import { generateLevel } from '../src/core/level';
+import { MIN_GAP, generateLevel } from '../src/core/level';
 import { mulberry32 } from '../src/core/rng';
 import { LIGHT_TIMING, TrafficLightModel } from '../src/core/traffic';
 import {
+  PHYSICS,
   POINTS,
   STOP_ZONE,
   ScoreKeeper,
+  brakingDistance,
+  canStopBefore,
   crossedLine,
   hasMissedStop,
   isInStopZone,
@@ -40,6 +43,7 @@ describe('i18n', () => {
 describe('design', () => {
   it('sanitizes garbage to a valid design', () => {
     expect(sanitizeDesign(null)).toEqual(DEFAULT_DESIGN);
+    expect(sanitizeDesign({ body: 'long' }).body).toBe('bendy'); // old saves
     expect(sanitizeDesign({ body: 'rocket', doors: 9, number: 'ab12345' })).toMatchObject({
       body: 'city',
       doors: 2,
@@ -76,6 +80,14 @@ describe('bus layout', () => {
               for (const d of L.doors) expect(overlap(w.x, w.x + w.w, d.x, d.x + d.w)).toBe(false);
           }
           expect(L.windows.length).toBeGreaterThan(0);
+          expect(L.joint !== null).toBe(body === 'bendy');
+          if (L.joint) {
+            const j = L.joint;
+            for (const dr of L.doors) expect(overlap(dr.x, dr.x + dr.w, j.x0, j.x1)).toBe(false);
+            for (const w of L.windows) expect(overlap(w.x, w.x + w.w, j.x0, j.x1)).toBe(false);
+            for (const wx of L.wheelXs) expect(overlap(wx - L.wheelR, wx + L.wheelR, j.x0, j.x1)).toBe(false);
+            expect(L.wheelXs).toHaveLength(3);
+          }
         });
       }
 });
@@ -92,7 +104,7 @@ describe('level generator', () => {
   it('keeps items well apart and before the finish', () => {
     const lvl = generateLevel(5);
     const xs = lvl.items.map((i) => (i.kind === 'stop' ? i.zoneEnd : i.lineX));
-    for (let i = 1; i < xs.length; i++) expect(xs[i]! - xs[i - 1]!).toBeGreaterThanOrEqual(1100);
+    for (let i = 1; i < xs.length; i++) expect(xs[i]! - xs[i - 1]!).toBeGreaterThanOrEqual(MIN_GAP);
     expect(lvl.finishX).toBeGreaterThan(xs[xs.length - 1]!);
     expect(lvl.items.filter((i) => i.kind === 'light' && i.teach)).toHaveLength(1);
   });
@@ -133,6 +145,19 @@ describe('rules', () => {
     s.passenger();
     expect(s.score).toBe(12);
     expect(s.passengersMoved).toBe(1);
+  });
+  it('a kid can always stop: the gap between items is many braking distances', () => {
+    for (let lvl = 1; lvl <= 12; lvl++) {
+      const { maxSpeed } = generateLevel(lvl);
+      expect(MIN_GAP).toBeGreaterThan(brakingDistance(maxSpeed) * 8);
+    }
+    expect(brakingDistance(0)).toBe(0);
+    expect(brakingDistance(PHYSICS.brake)).toBe(PHYSICS.brake / 2);
+  });
+  it('knows when a bus can no longer stop before a line', () => {
+    expect(canStopBefore(0, 1000, 340)).toBe(true);
+    expect(canStopBefore(950, 1000, 340)).toBe(false);
+    expect(canStopBefore(990, 1000, 0)).toBe(false); // 10 px is inside the safety margin
   });
   it('stars', () => {
     expect([0, 1, 2, 3, 9].map(starsFor)).toEqual([3, 2, 2, 1, 1]);

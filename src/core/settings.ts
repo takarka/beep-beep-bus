@@ -7,6 +7,8 @@ export interface Settings {
   lang: Lang;
   sound: boolean;
   music: boolean;
+  /** "Helper" mode: the bus brakes by itself at red lights and bus stops. */
+  assist: boolean;
 }
 
 type Listener = (s: Settings) => void;
@@ -19,6 +21,7 @@ function load(): Settings {
     lang: raw && isLang(raw.lang) ? raw.lang : detectLang(navLangs),
     sound: raw?.sound ?? true,
     music: raw?.music ?? true,
+    assist: raw?.assist ?? false,
   };
 }
 

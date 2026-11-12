@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { audio } from '../audio/AudioEngine';
 import { BusView } from '../bus/BusView';
 import { DEFAULT_DESIGN, loadDesign } from '../bus/design';
+import { DRIVE_SCALE } from '../bus/geometry';
 import { C, GAME_W } from '../config';
 import { recordResult } from '../core/progress';
 import { starsFor } from '../core/rules';
@@ -27,8 +28,9 @@ export class ResultScene extends Phaser.Scene {
     const stars = starsFor(r.mistakes);
     recordResult(r.level, stars);
 
-    this.bus = new BusView(this, 200, GROUND_Y, loadDesign() ?? { ...DEFAULT_DESIGN });
-    this.bus.setScale(0.55);
+    const design = loadDesign() ?? { ...DEFAULT_DESIGN };
+    this.bus = new BusView(this, 200, GROUND_Y, design);
+    this.bus.setScale(DRIVE_SCALE[design.body] * 0.7);
 
     const cx = GAME_W / 2;
     const panel = this.add.graphics();

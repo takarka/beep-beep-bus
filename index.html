@@ -8,9 +8,12 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <title>Бип-Бип Автобус</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <meta name="apple-mobile-web-app-title" content="Бип-Бип" />
     <style>
       html, body { margin: 0; padding: 0; height: 100%; background: #2d2a32; overflow: hidden;
-        touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+        touch-action: none; overscroll-behavior: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
       #game { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
       #game canvas { display: block; }
       #rotate { display: none; position: fixed; inset: 0; z-index: 10; background: #7cc6de; color: #2d2a32;

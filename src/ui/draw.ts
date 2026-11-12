@@ -100,6 +100,47 @@ export const Icons = {
     const ay = Math.sin(-2.6) * s * 0.27;
     g.fillTriangle(ax - s * 0.17, ay - s * 0.02, ax + s * 0.13, ay - s * 0.14, ax + s * 0.05, ay + s * 0.18);
   },
+  /** Car horn: a flared trumpet with sound waves. */
+  horn(g: G, s: number, color: number = C.cream) {
+    g.fillStyle(color, 1);
+    g.fillPoints(
+      [
+        new Phaser.Math.Vector2(-s * 0.38, -s * 0.1),
+        new Phaser.Math.Vector2(-s * 0.1, -s * 0.1),
+        new Phaser.Math.Vector2(s * 0.14, -s * 0.3),
+        new Phaser.Math.Vector2(s * 0.14, s * 0.3),
+        new Phaser.Math.Vector2(-s * 0.1, s * 0.1),
+        new Phaser.Math.Vector2(-s * 0.38, s * 0.1),
+      ],
+      true,
+    );
+    g.lineStyle(s * 0.07, color, 1);
+    for (const rr of [0.2, 0.34]) {
+      g.beginPath();
+      g.arc(s * 0.14, 0, s * rr, -0.8, 0.8);
+      g.strokePath();
+    }
+  },
+  /** Steering wheel: the "helper drives for you" switch. */
+  wheel(g: G, s: number, color: number = C.cream) {
+    g.lineStyle(s * 0.1, color, 1);
+    g.strokeCircle(0, 0, s * 0.3);
+    g.lineBetween(-s * 0.3, 0, -s * 0.08, 0);
+    g.lineBetween(s * 0.08, 0, s * 0.3, 0);
+    g.lineBetween(0, s * 0.08, 0, s * 0.3);
+    g.fillStyle(color, 1);
+    g.fillCircle(0, 0, s * 0.1);
+  },
+  fullscreen(g: G, s: number, color: number = C.cream) {
+    g.lineStyle(s * 0.1, color, 1);
+    for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]] as const) {
+      g.beginPath();
+      g.moveTo(sx * s * 0.34, sy * s * 0.12);
+      g.lineTo(sx * s * 0.34, sy * s * 0.34);
+      g.lineTo(sx * s * 0.12, sy * s * 0.34);
+      g.strokePath();
+    }
+  },
   /** Little bus (used for "back to the factory"). */
   bus(g: G, s: number, color: number = C.yellow) {
     g.lineStyle(Math.max(2, s * 0.05), C.ink, 1);

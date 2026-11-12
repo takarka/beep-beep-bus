@@ -41,6 +41,8 @@ export interface ButtonOpts {
   text?: string;
   textSize?: number;
   onClick: () => void;
+  /** Fires the moment the finger touches the button (for the horn). */
+  onDown?: () => void;
   silent?: boolean;
 }
 
@@ -80,6 +82,7 @@ export class Button extends Phaser.GameObjects.Container {
       this.pressed = true;
       this.setScale(this.baseScale * 0.92);
       if (!opts.silent) audio.click();
+      opts.onDown?.();
     });
     this.on('pointerup', () => {
       if (!this.pressed) return;
