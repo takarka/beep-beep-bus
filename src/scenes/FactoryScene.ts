@@ -16,7 +16,6 @@ import {
 import { loadGarage, saveDesign, slotForNewBus } from '../bus/garage';
 import { BODY_SIZE } from '../bus/geometry';
 import { C, FONT, GAME_H, GAME_W } from '../config';
-import { loadProgress } from '../core/progress';
 import { t, type TextKey } from '../i18n';
 import { Icons, drawStar } from '../ui/draw';
 import { Button, confetti, label } from '../ui/widgets';
@@ -180,7 +179,7 @@ export class FactoryScene extends Phaser.Scene {
       icon: (g, s) => Icons.play(g, s),
       onClick: () => {
         saveDesign(this.design, this.slot);
-        this.scene.start('Drive', { level: loadProgress().level });
+        this.scene.start('Map');
       },
     });
 
@@ -405,7 +404,7 @@ export class FactoryScene extends Phaser.Scene {
         color: C.green,
         text: t('go'),
         textSize: 48,
-        onClick: () => this.scene.start('Drive', { level: loadProgress().level }),
+        onClick: () => this.scene.start('Map'),
       });
       this.tweens.add({ targets: go, scale: { from: 0, to: 1 }, duration: 400, ease: 'Back.easeOut' });
       this.tweens.add({ targets: go, angle: { from: -2, to: 2 }, yoyo: true, repeat: -1, duration: 400, delay: 400 });

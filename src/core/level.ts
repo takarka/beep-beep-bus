@@ -36,10 +36,17 @@ const FIRST_ITEM_X = 2300;
 export const MIN_GAP = 2100;
 export const MAX_GAP = 2700;
 
+/** More stops and lights as the route goes on: 3 on levels 1–2 up to 8 on levels 11–12. */
 export function levelCounts(level: number): { stops: number; lights: number } {
-  const n = Math.min(2 + Math.max(1, level), 7);
+  const n = Math.min(3 + Math.floor((Math.max(1, level) - 1) / 2), 8);
   return { stops: n, lights: n };
 }
+
+/** Bus speed limit for a level (world px/s): gentle at first, a bit faster later. */
+export const maxSpeedFor = (level: number): number => Math.min(340 + (Math.max(1, level) - 1) * 15, 510);
+
+/** The most people that may wait at one stop. */
+export const maxWaitingFor = (level: number): number => Math.min(3 + Math.floor(Math.max(1, level) / 3), 6);
 
 export function generateLevel(level: number, seed = level * 7919): LevelData {
   const rng = mulberry32(seed);
@@ -66,7 +73,7 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
       });
       firstLight = false;
     } else {
-      items.push({ kind, zoneEnd: x, waiting: randInt(rng, 1, 4), exiting: randInt(rng, 0, 3) });
+      items.push({ kind, zoneEnd: x, waiting: randInt(rng, 1, maxWaitingFor(level)), exiting: randInt(rng, 0, 3) });
     }
     x += randInt(rng, MIN_GAP, MAX_GAP);
   }
@@ -77,6 +84,6 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
     items,
     finishX,
     length: finishX + 1400,
-    maxSpeed: Math.min(340 + (level - 1) * 25, 500),
+    maxSpeed: maxSpeedFor(level),
   };
 }

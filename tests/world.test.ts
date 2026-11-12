@@ -18,7 +18,8 @@ describe('world', () => {
     expect(envForLevel(0)).toEqual(envForLevel(1));
     const seen = new Set(Array.from({ length: 8 }, (_, i) => envKey(envForLevel(i + 1))));
     expect(seen.size).toBe(8); // every season × day/night combination appears
-    expect(envForLevel(9)).toEqual(envForLevel(1)); // and the cycle repeats
+    expect(envForLevel(13)).toEqual(envForLevel(1)); // and the cycle repeats
+    expect(new Set(Array.from({ length: 12 }, (_, i) => JSON.stringify(envForLevel(i + 1)))).size).toBe(12);
   });
 
   it('auto follows the level, manual follows the choice', () => {

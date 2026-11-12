@@ -18,6 +18,12 @@
 - Helper mode (auto-brake), fullscreen button, PWA (home screen + offline)
 - Garage with up to 3 saved buses
 
+## ✅ Version 0.3 (done)
+
+- **Map of Astana** with 12 levels (landmarks), check marks and stars, unlocking, total points
+- Seasons (summer, autumn, winter, spring), day and night, rain and snow, own setting per level + weather picker
+- Space bar = horn
+
 ## 🔜 Version 0.2: mobile and polish (remaining)
 
 - [ ] Phone testing: button sizes, safe areas (notch), fullscreen on the first tap
@@ -30,8 +36,10 @@
 - [ ] **Pedestrian crossing**: a pedestrian walks across, you must let them pass (+points)
 - [ ] **STOP sign**, "children" sign, speed bumps
 - [ ] Other cars on the road (keep your distance)
-- [ ] Day / evening / night (turn on the headlights!), rain (wipers)
-- [ ] Different routes: city, village, seaside, mountains
+- [ ] Evening / sunrise, fog, wipers
+- [ ] More routes / cities after Astana (Almaty, Shymkent, the seaside, mountains)
+- [ ] Landmark story on each level: a short postcard or fact when it is completed
+- [ ] More levels on the map (extend `core/campaign.ts`)
 - [ ] Passengers with a destination: "take me to the park", where the child picks the right stop
 
 ## 🎨 Version 0.4: garage and rewards

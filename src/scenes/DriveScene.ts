@@ -83,7 +83,7 @@ export class DriveScene extends Phaser.Scene {
 
   private gas!: HoldButton;
   private brake!: HoldButton;
-  private keys!: Record<'right' | 'left' | 'up' | 'down' | 'd' | 'a' | 'w' | 's' | 'space', Phaser.Input.Keyboard.Key>;
+  private keys!: Record<'right' | 'left' | 'up' | 'down' | 'd' | 'a' | 'w' | 's', Phaser.Input.Keyboard.Key>;
   private scoreText!: Phaser.GameObjects.Text;
   private paxText!: Phaser.GameObjects.Text;
   private progressBus!: G;
@@ -388,11 +388,13 @@ export class DriveScene extends Phaser.Scene {
     if (kb) {
       const K = Phaser.Input.Keyboard.KeyCodes;
       this.keys = kb.addKeys({
-        right: K.RIGHT, left: K.LEFT, up: K.UP, down: K.DOWN, d: K.D, a: K.A, w: K.W, s: K.S, space: K.SPACE,
+        right: K.RIGHT, left: K.LEFT, up: K.UP, down: K.DOWN, d: K.D, a: K.A, w: K.W, s: K.S,
       }) as DriveScene['keys'];
       kb.on('keydown-ESC', () => this.setPaused(!this.paused));
       kb.on('keydown-P', () => this.setPaused(!this.paused));
       kb.on('keydown-H', () => this.honk());
+      kb.on('keydown-SPACE', () => this.honk());
+      kb.addCapture('SPACE'); // never scroll the page
     }
   }
 
@@ -610,7 +612,7 @@ export class DriveScene extends Phaser.Scene {
     const dt = Math.min(delta / 1000, 0.05);
     const k = this.keys;
     let gas = Boolean(this.gas.isDown || (k && (k.right.isDown || k.up.isDown || k.d.isDown || k.w.isDown)));
-    let brake = Boolean(this.brake.isDown || (k && (k.left.isDown || k.down.isDown || k.a.isDown || k.s.isDown || k.space.isDown)));
+    let brake = Boolean(this.brake.isDown || (k && (k.left.isDown || k.down.isDown || k.a.isDown || k.s.isDown)));
 
     // "Helper" mode: the bus brakes by itself before red lights and bus stops.
     if (this.assist && this.phase === 'driving' && this.autoBrakeNeeded(this.bus.frontWorldX())) {

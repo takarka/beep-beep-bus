@@ -21,8 +21,8 @@ npm run build      # production build into dist/ (static files, can be hosted an
 | Action | Touch screen | Keyboard |
 |---|---|---|
 | Gas | green pedal (bottom right) | → / ↑ / D / W |
-| Brake | red pedal with a hand (bottom left) | ← / ↓ / A / S / Space |
-| Horn (beep-beep) | yellow button next to the gas pedal; tap the bus in the menu | H |
+| Brake | red pedal with a hand (bottom left) | ← / ↓ / A / S |
+| Horn (beep-beep) | yellow button next to the gas pedal; tap the bus in the menu | **Space** / H |
 | Pause | ⏸ button | Esc / P |
 
 If the child just lets go of the gas, the bus slows down smoothly by itself, so even a 4-year-old can stop with one pedal.
@@ -40,6 +40,16 @@ If the child just lets go of the gas, the bus slows down smoothly by itself, so 
 Yellow is not penalized (the child is still learning). A yellow light never turns red while the bus is too close and too fast to stop, so the player is never punished for something they couldn't avoid. Lights and stops are at least 2100 px apart (about 6 seconds of driving) and the bus is slow and gentle, so there is always time to react.
 
 **Helper mode** (steering-wheel button in the menu or in the pause screen): the bus brakes by itself in front of red lights and bus stops, so even a 3–4 year old can play by just holding the gas. The first light on each level always turns red as the bus approaches, to show the rule. Stars at the end: 0 mistakes = ⭐⭐⭐, 1–2 = ⭐⭐, more = ⭐.
+
+## Campaign: the map of Astana
+
+**Play** opens a map of Astana with **12 levels**, one per landmark: station, concert hall, Triumph of Astana, Khan Shatyr, Palace of Peace, Baiterek, Ak Orda, Hazrat Sultan mosque, Kazak Eli, Nur Alem, Astana Arena, airport. Only level 1 is open at first; **finishing a level opens the next**, puts a green ✓ and 1–3 stars on it, builds the road to the next landmark and drives the bus there. The panel at the top shows the total points (best score of every level) and how many levels are done. Finished levels can be replayed to improve stars and score; a locked level just shakes.
+
+Levels get harder: 3 stops and 3 lights on levels 1–2, up to 8 and 8 on levels 11–12, more people waiting, and a higher speed limit (340 → 510 px/s). Levels, landmark positions and texts live in `core/campaign.ts`, `core/level.ts` and `i18n`; to add levels extend `LANDMARKS` / `MAP_NODES` and `LEVEL_COUNT`.
+
+## Seasons, day / night, weather
+
+Every level has its own setting: summer, autumn, winter or spring, by day or by night, dry or rainy (snowy in winter). Night has a moon, stars, lit windows and street lamps, and the bus switches on its headlight beams. Autumn drops leaves, spring drops petals, rain also makes noise. The **«Погода» / "Weather"** button in the menu opens a screen to pick the season, day or night and weather yourself; the dice button returns to "auto" (the setting follows the level).
 
 ## Bus types
 
@@ -73,10 +83,13 @@ src/
     traffic.ts          traffic light model (green → yellow → red)
     rules.ts            stop zones, red-light crossing, points, stars
     settings.ts         language / sound / music (localStorage)
-    progress.ts         unlocked level and best stars
+    progress.ts         stars and score per level, what is unlocked
+    campaign.ts         the 12 levels and their places on the map of Astana
+    world.ts            seasons, day/night, weather and their colour palettes
     rng.ts, storage.ts
   bus/
     design.ts           bus design model (body, doors, wheels, colour…) + validation
+    garage.ts           up to 3 saved buses
     geometry.ts         bus layout maths (where doors, windows, wheels go)
     BusView.ts          bus drawing from the model, doors, wheels, passengers in windows
   audio/AudioEngine.ts  synthesized sounds, engine hum, background music
@@ -84,6 +97,9 @@ src/
   scenes/
     BootScene           texture generation
     MenuScene           menu, language, sound
+    MapScene            map of Astana: levels, stars, check marks, road building
+    GarageScene         up to 3 saved buses
+    WorldScene          season / day-night / weather picker
     FactoryScene        7 steps of building the bus
     DriveScene          the route: physics, lights, stops, HUD
     ResultScene         stars, stats, next level

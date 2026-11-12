@@ -5,7 +5,8 @@ import { DEFAULT_DESIGN } from '../bus/design';
 import { loadDesign } from '../bus/garage';
 import { DRIVE_SCALE } from '../bus/geometry';
 import { C, GAME_W } from '../config';
-import { loadProgress } from '../core/progress';
+import { completedCount, loadProgress } from '../core/progress';
+import { LEVEL_COUNT } from '../core/campaign';
 import { getSettings, updateSettings } from '../core/settings';
 import { DICTS, LANGS, t } from '../i18n';
 import { Icons } from '../ui/draw';
@@ -72,16 +73,16 @@ export class MenuScene extends Phaser.Scene {
       this.tweens.add({ targets: this.bus, scaleY: s * 0.93, yoyo: true, duration: 120, onComplete: () => this.bus.setScale(s) });
     });
 
-    // Play: straight to the route if the bus is already built, otherwise to the factory.
+    // Play: to the map of Astana if the bus is already built, otherwise to the factory first.
     const play = new Button(this, GAME_W - 190, 290, {
       r: 82,
       color: C.green,
       icon: (g, s) => Icons.play(g, s),
-      onClick: () => this.go(saved ? 'Drive' : 'Factory', saved ? { level: loadProgress().level } : undefined),
+      onClick: () => this.go(saved ? 'Map' : 'Factory'),
     });
     this.tweens.add({ targets: play, scale: { from: 1, to: 1.08 }, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' });
     label(this, play.x, play.y + 112, t('play'), { size: 30 });
-    if (saved) label(this, play.x, play.y + 150, `${t('level')} ${loadProgress().level}`, { size: 22, strokeThickness: 4 });
+    label(this, play.x, play.y + 150, `${completedCount(loadProgress())}/${LEVEL_COUNT}`, { size: 24, strokeThickness: 4 });
 
     // Edit the bus: always reachable from here (and from pause / results)
     new Button(this, 190, 290, {

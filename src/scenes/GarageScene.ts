@@ -4,7 +4,6 @@ import { BusView } from '../bus/BusView';
 import { GARAGE_SIZE, loadGarage, removeBus, saveGarage, selectBus } from '../bus/garage';
 import { BODY_SIZE } from '../bus/geometry';
 import { C, GAME_W } from '../config';
-import { loadProgress } from '../core/progress';
 import { t } from '../i18n';
 import { Icons } from '../ui/draw';
 import { createScenery, currentEnv } from '../ui/scenery';
@@ -85,7 +84,7 @@ export class GarageScene extends Phaser.Scene {
         icon: (g, sz) => Icons.play(g, sz),
         onClick: () => {
           saveGarage(selectBus(garage, i));
-          this.go('Drive', { level: loadProgress().level });
+          this.go('Map');
         },
       });
       new Button(this, x, by, {

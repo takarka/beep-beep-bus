@@ -43,6 +43,10 @@ const CYCLE: readonly Env[] = [
   { season: 'autumn', time: 'night', precip: true },
   { season: 'winter', time: 'night', precip: true },
   { season: 'spring', time: 'night', precip: false },
+  { season: 'summer', time: 'day', precip: true },
+  { season: 'autumn', time: 'night', precip: false },
+  { season: 'winter', time: 'day', precip: false },
+  { season: 'spring', time: 'day', precip: false },
 ];
 
 export const envForLevel = (level: number): Env => CYCLE[(Math.max(1, Math.floor(level)) - 1) % CYCLE.length]!;

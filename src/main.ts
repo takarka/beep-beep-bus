@@ -8,6 +8,7 @@ import { BootScene } from './scenes/BootScene';
 import { DriveScene } from './scenes/DriveScene';
 import { FactoryScene } from './scenes/FactoryScene';
 import { GarageScene } from './scenes/GarageScene';
+import { MapScene } from './scenes/MapScene';
 import { MenuScene } from './scenes/MenuScene';
 import { WorldScene } from './scenes/WorldScene';
 import { ResultScene } from './scenes/ResultScene';
@@ -42,7 +43,7 @@ async function start(): Promise<void> {
     audio: { noAudio: true },
     render: { antialias: true, roundPixels: false },
     input: { activePointers: 3 },
-    scene: [BootScene, MenuScene, GarageScene, WorldScene, FactoryScene, DriveScene, ResultScene],
+    scene: [BootScene, MenuScene, GarageScene, WorldScene, FactoryScene, MapScene, DriveScene, ResultScene],
   });
 
   // Offline support + "install to home screen" (production builds only)

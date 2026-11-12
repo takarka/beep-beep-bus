@@ -5,9 +5,10 @@ import { DEFAULT_DESIGN } from '../bus/design';
 import { loadDesign } from '../bus/garage';
 import { DRIVE_SCALE } from '../bus/geometry';
 import { C, GAME_W } from '../config';
-import { recordResult } from '../core/progress';
+import { isCompleted, loadProgress, recordResult } from '../core/progress';
+import { MAP_NODES } from '../core/campaign';
 import { starsFor } from '../core/rules';
-import { t } from '../i18n';
+import { t, type TextKey } from '../i18n';
 import { Icons, drawStar } from '../ui/draw';
 import { GROUND_Y } from '../ui/textures';
 import { createScenery } from '../ui/scenery';
@@ -31,7 +32,8 @@ export class ResultScene extends Phaser.Scene {
     const env = resolveEnv(r.level, getSettings().world);
     this.backdrop = createScenery(this, env, { behindUi: true });
     const stars = starsFor(r.mistakes);
-    recordResult(r.level, stars);
+    const firstTime = !isCompleted(loadProgress(), r.level);
+    recordResult(r.level, stars, r.score);
 
     const design = loadDesign() ?? { ...DEFAULT_DESIGN };
     this.bus = new BusView(this, 200, GROUND_Y, design);
@@ -46,7 +48,8 @@ export class ResultScene extends Phaser.Scene {
     panel.strokeRoundedRect(cx - 330, 30, 660, 520, 34);
 
     label(this, cx, 100, t('results'), { size: 50, color: C.yellow });
-    label(this, cx, 150, `${t('level')} ${r.level}`, { size: 28, color: C.ink, strokeThickness: 0 });
+    const landmark = MAP_NODES[r.level - 1]?.landmark;
+    label(this, cx, 150, `${t('level')} ${r.level}${landmark ? ' · ' + t(`lm_${landmark}` as TextKey) : ''}`, { size: 28, color: C.ink, strokeThickness: 0 });
 
     // Stars pop in one by one
     for (let i = 0; i < 3; i++) {
@@ -99,7 +102,8 @@ export class ResultScene extends Phaser.Scene {
       color: C.green,
       text: t('next'),
       textSize: 36,
-      onClick: () => this.scene.start('Drive', { level: r.level + 1 }),
+      // back to the map: a first-time completion gets its check mark and the bus drives on
+      onClick: () => this.scene.start('Map', firstTime ? { celebrate: r.level } : undefined),
     });
     this.tweens.add({ targets: next, scale: 1.08, yoyo: true, repeat: -1, duration: 600 });
   }

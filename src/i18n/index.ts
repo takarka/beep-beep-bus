@@ -44,6 +44,20 @@ const en = {
   body_bendy: 'Bendy',
   body_double: 'Double-decker',
   body_school: 'School',
+  astana: 'Astana',
+  allDone: 'You drove all of Astana!',
+  lm_station: 'Station',
+  lm_concert: 'Concert Hall',
+  lm_triumph: 'Triumph of Astana',
+  lm_shatyr: 'Khan Shatyr',
+  lm_peace: 'Palace of Peace',
+  lm_baiterek: 'Baiterek',
+  lm_akorda: 'Ak Orda',
+  lm_mosque: 'Hazrat Sultan',
+  lm_kazakheli: 'Kazak Eli',
+  lm_nuralem: 'Nur Alem',
+  lm_arena: 'Astana Arena',
+  lm_airport: 'Airport',
 };
 
 export type TextKey = keyof typeof en;
@@ -91,6 +105,20 @@ const ru: Dict = {
   body_bendy: 'Гармошка',
   body_double: 'Двухэтажный',
   body_school: 'Школьный',
+  astana: 'Астана',
+  allDone: 'Ты проехал всю Астану!',
+  lm_station: 'Вокзал',
+  lm_concert: 'Концертный зал',
+  lm_triumph: 'Триумф Астаны',
+  lm_shatyr: 'Хан Шатыр',
+  lm_peace: 'Дворец мира',
+  lm_baiterek: 'Байтерек',
+  lm_akorda: 'Ак Орда',
+  lm_mosque: 'Хазрет Султан',
+  lm_kazakheli: 'Казак Ели',
+  lm_nuralem: 'Нур Алем',
+  lm_arena: 'Астана Арена',
+  lm_airport: 'Аэропорт',
 };
 
 const kk: Dict = {
@@ -135,6 +163,20 @@ const kk: Dict = {
   body_bendy: 'Гармонь',
   body_double: 'Екі қабатты',
   body_school: 'Мектеп',
+  astana: 'Астана',
+  allDone: 'Бүкіл Астананы аралап шықтың!',
+  lm_station: 'Вокзал',
+  lm_concert: 'Концерт залы',
+  lm_triumph: 'Триумф Астана',
+  lm_shatyr: 'Хан Шатыр',
+  lm_peace: 'Бейбітшілік сарайы',
+  lm_baiterek: 'Бәйтерек',
+  lm_akorda: 'Ақорда',
+  lm_mosque: 'Хазірет Сұлтан',
+  lm_kazakheli: 'Қазақ Елі',
+  lm_nuralem: 'Нұр Әлем',
+  lm_arena: 'Астана Арена',
+  lm_airport: 'Әуежай',
 };
 
 export const LANGS = ['ru', 'kk', 'en'] as const;
