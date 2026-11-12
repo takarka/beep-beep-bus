@@ -39,6 +39,7 @@ class AudioEngine {
   private nextNoteTime = 0;
   private step = 0;
 
+  private sirenNode: OscillatorNode | null = null;
   private rain: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
   private engine: { osc: OscillatorNode; osc2: OscillatorNode; gain: GainNode } | null = null;
 
@@ -195,6 +196,54 @@ class AudioEngine {
     notes.forEach((n, i) =>
       this.tone({ freq: midi(n), dur: i === notes.length - 1 ? 0.6 : 0.16, type: 'triangle', vol: 0.25, at: times[i] }),
     );
+  }
+
+  /** The wheels thump over a speed bump; harder (`power` 0..1) = deeper and louder. */
+  bump(power: number): void {
+    if (!this.live()) return;
+    this.tone({ freq: 140 - 60 * power, dur: 0.16 + 0.12 * power, type: 'sine', vol: 0.18 + 0.4 * power, slideTo: 50 });
+    this.noise(0.1 + 0.1 * power, 0.1 + 0.3 * power, 500, 0.08, 150);
+  }
+
+  crash(): void {
+    if (!this.live()) return;
+    this.noise(0.45, 0.6, 1800, 0, 250);
+    this.tone({ freq: 95, dur: 0.35, type: 'sine', vol: 0.55, slideTo: 45 });
+    this.tone({ freq: 420, dur: 0.12, type: 'square', vol: 0.1, slideTo: 160 });
+    this.tone({ freq: 310, dur: 0.2, type: 'sawtooth', vol: 0.07, at: 0.06, slideTo: 120 });
+  }
+
+  /** Police siren: a rising and falling wail. Stops by itself after `seconds`. */
+  siren(seconds = 3): void {
+    const ctx = this.live();
+    if (!ctx) return;
+    this.stopSiren();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    const t0 = ctx.currentTime;
+    osc.frequency.setValueAtTime(650, t0);
+    for (let t = 0; t < seconds; t += 0.9) {
+      osc.frequency.linearRampToValueAtTime(1150, t0 + t + 0.45);
+      osc.frequency.linearRampToValueAtTime(650, t0 + t + 0.9);
+    }
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(0.11, t0 + 0.05);
+    gain.gain.setValueAtTime(0.11, t0 + seconds - 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + seconds);
+    osc.connect(gain).connect(this.sfxBus);
+    osc.start(t0);
+    osc.stop(t0 + seconds + 0.05);
+    this.sirenNode = osc;
+  }
+
+  stopSiren(): void {
+    try {
+      this.sirenNode?.stop();
+    } catch {
+      /* already stopped */
+    }
+    this.sirenNode = null;
   }
 
   // ---------- rain ----------

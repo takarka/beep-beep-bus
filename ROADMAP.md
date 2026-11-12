@@ -29,6 +29,13 @@
 
 - Oncoming traffic in the far lane: passenger cars, a police car, a small bus; they obey lights and keep their distance
 
+## ✅ Version 0.5 (done)
+
+- Pedestrians on the zebra (cross on red; the red waits for them)
+- Traffic in our own lane: solid vehicles, queues, crashes, hasty drivers who may run into us
+- Speed bumps with a warning sign: gentle / hop / hard jolt, other vehicles slow down
+- Police siren after three mistakes in a row
+
 ## 🔜 Version 0.2: mobile and polish (remaining)
 
 - [ ] Phone testing: button sizes, safe areas (notch), fullscreen on the first tap
@@ -38,9 +45,9 @@
 
 ## 🚀 Version 0.3: more gameplay
 
-- [ ] **Pedestrian crossing**: a pedestrian walks across, you must let them pass (+points)
+- [ ] Pedestrians at crossings without a traffic light (you must stop and let them pass)
 - [ ] **STOP sign**, "children" sign, speed bumps
-- [ ] Traffic in our own lane too (the bus must keep its distance), parked cars, a bus that stops at the stops
+- [ ] Parked cars, a bot bus that stops at the bus stops too, overtaking
 - [ ] More vehicle types (taxi, truck, ambulance that you must let pass)
 - [ ] Evening / sunrise, fog, wipers
 - [ ] More routes / cities after Astana (Almaty, Shymkent, the seaside, mountains)

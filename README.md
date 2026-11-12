@@ -36,6 +36,9 @@ If the child just lets go of the gas, the bus slows down smoothly by itself, so 
 | Stopped and waited at a red light | **+5** |
 | Drove through a red light | **−10** |
 | Drove past a stop where people were waiting | **−5** |
+| Drove into another vehicle (a crash) | **−10** |
+| Drove over a speed bump slowly | **+3** |
+| Drove over a speed bump too fast | **−5** |
 
 Yellow is not penalized (the child is still learning). A yellow light never turns red while the bus is too close and too fast to stop, so the player is never punished for something they couldn't avoid. Lights and stops are at least 2100 px apart (about 6 seconds of driving) and the bus is slow and gentle, so there is always time to react.
 
@@ -48,6 +51,15 @@ Yellow is not penalized (the child is still learning). A yellow light never turn
 **Every level ends at its own landmark.** The finish of the route is the building from the map (station, Baiterek, Khan Shatyr, Astana Arena, ...) drawn big behind the road with a name board, dimmed with lit windows at night, and the bus announces the arrival. Drawings: `ui/landmarkScenes.ts` (big) and `ui/landmarks.ts` (map badges).
 
 Levels get harder: 3 stops and 3 lights on levels 1–2, up to 8 and 8 on levels 11–12, more people waiting, and a higher speed limit (340 → 510 px/s). Levels, landmark positions and texts live in `core/campaign.ts`, `core/level.ts` and `i18n`; to add levels extend `LANDMARKS` / `MAP_NODES` and `LEVEL_COUNT`.
+
+## Pedestrians, traffic in our lane, speed bumps, the police siren
+
+- **Pedestrians.** When a light turns red, 1–3 people cross on the zebra (on the first light of every level always, to teach it). The light stays red until everybody has crossed, and cars of both lanes wait for them too.
+- **Traffic in our own lane** (from level 2): passenger cars, small buses and full-size buses (with their own random designs) drive the same way. They are **solid, nobody drives through anybody**: if we catch up with a slower vehicle we have to stay behind it, and driving into it is a **crash** (−10, sparks, a thump, the bus is shaken and can't use the gas for a second). They stop at red lights and queue, so when our bus stops at a bus stop the vehicles behind stop too. They keep a safe distance and can always stop for us, **except hasty drivers** (from level 5, marked with a red «!» when they are right behind us): they follow too close and overestimate their brakes, so if our bus stops suddenly they may **run into it** (we get a banner and a jolt, no penalty). Braking gently, as the helper does, avoids it. Vehicles turn off into side streets after a while, so nobody blocks the road forever.
+- **Speed bumps** («лежачие полицейские», from level 2): a yellow-and-black bump across the road with a warning sign before it. Slow (≤ 130): the bus only wobbles and we get +3 and «Аккуратно!». Medium: the bus hops and loses some speed. Fast (> 230): a hard jolt, the bus loses half its speed, the screen shakes and it costs −5. Cars, buses and oncoming vehicles all slow down for bumps by themselves. The helper slows down before them.
+- **Police siren.** Three mistakes in a row (with no good deed in between: a stop, a passenger, a polite wait at the red, a careful bump) make the siren wail for 3 seconds, with a red-and-blue flashing screen and the banner «Соблюдай правила!».
+
+Rules and numbers: `core/rules.ts` (points, siren, bump results), `traffic/ai.ts` (drivers, bump zones), `traffic/collision.ts` (solid vehicles), `traffic/LaneTraffic.ts`, `traffic/Crossing.ts`.
 
 ## Other road users (oncoming traffic)
 

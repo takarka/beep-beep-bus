@@ -28,6 +28,9 @@ import { landmarkForLevel } from '../core/campaign';
 import { drawLandmark } from '../ui/landmarks';
 import { drawLandmarkBig } from '../ui/landmarkScenes';
 import { TrafficManager } from '../traffic/TrafficManager';
+import { BUMP, bumpResult } from '../core/rules';
+import { LaneTraffic, type LaneCrash } from '../traffic/LaneTraffic';
+import { Crossing } from '../traffic/Crossing';
 import { precipKind, resolveEnv } from '../core/world';
 import { Button, HoldButton, floatText, label } from '../ui/widgets';
 import { addAudioToggles } from './MenuScene';
@@ -55,6 +58,9 @@ interface LightRt {
   rewarded: boolean;
   hintFor: LightState | null;
   waitedAtRed: boolean;
+  /** People crossing on the zebra while the light is red. */
+  crossing: Crossing;
+  prevState: LightState;
 }
 
 type Phase = 'driving' | 'serving' | 'finishing' | 'ended';
@@ -81,6 +87,12 @@ export class DriveScene extends Phaser.Scene {
   private gasTouched = false;
   private assist = false;
   private traffic!: TrafficManager;
+  private lane!: LaneTraffic;
+  /** Speed bumps the bus has already driven over. */
+  private bumpsDone = new Set<number>();
+  /** Seconds the bus is still shaken after hitting somebody (no gas). */
+  private stun = 0;
+  private crashCooldown = 0;
   private lastHorn = -1000;
   /** Screen x of the bus centre; leaves more road visible ahead of the bus. */
   private camLead = 360;
@@ -113,6 +125,9 @@ export class DriveScene extends Phaser.Scene {
     this.paused = false;
     this.gasTouched = false;
     this.assist = getSettings().assist;
+    this.stun = 0;
+    this.crashCooldown = 0;
+    this.bumpsDone = new Set<number>();
     this.banner = null;
     this.pauseLayer = null;
     this.rng = mulberry32(this.level.level * 31 + 5);
@@ -129,8 +144,10 @@ export class DriveScene extends Phaser.Scene {
     this.bus.setScale(DRIVE_SCALE[design.body]).setDepth(10);
     this.camLead = 140 + this.bus.lengthWorld() / 2;
     this.bus.setNight(env.time === 'night');
-    this.traffic = new TrafficManager(this, { night: env.time === 'night', level: this.level.level });
+    this.traffic = new TrafficManager(this, { night: env.time === 'night', level: this.level.level, bumps: this.level.bumps });
     this.traffic.prewarm(Phaser.Math.Clamp(START_X - this.camLead, 0, this.level.length - GAME_W));
+    this.lane = new LaneTraffic(this, { night: env.time === 'night', level: this.level.level, bumps: this.level.bumps });
+    this.lane.prewarm(START_X);
     this.bus.setPassengers(0);
 
     const stopsTotal = this.level.items.filter((i) => i.kind === 'stop').length;
@@ -139,6 +156,7 @@ export class DriveScene extends Phaser.Scene {
       if (item.kind === 'light') this.createLight(item);
       else this.createStop(item, ++stopIdx === stopsTotal);
     }
+    this.level.bumps.forEach((bx) => this.createBump(bx));
     this.createFinish(env.time === 'night');
     this.createHud();
     this.createControls();
@@ -149,6 +167,7 @@ export class DriveScene extends Phaser.Scene {
     this.events.once('shutdown', () => {
       audio.stopEngine();
       audio.stopRain();
+      audio.stopSiren();
     });
 
     this.showStartHint();
@@ -205,6 +224,8 @@ export class DriveScene extends Phaser.Scene {
       rewarded: false,
       hintFor: null,
       waitedAtRed: false,
+      crossing: new Crossing(this, x + 26, x + 170),
+      prevState: data.initial,
     };
     this.signals.push(rt);
     this.drawLamps(rt);
@@ -231,6 +252,47 @@ export class DriveScene extends Phaser.Scene {
         g.fillCircle(-7, y - 7, 6);
       }
     });
+  }
+
+  /** A yellow-and-black speed bump across the road, with a warning sign before it. */
+  private createBump(bx: number): void {
+    const g = this.add.graphics().setDepth(-4);
+    const w = 52;
+    const h = ROAD_BOTTOM - ROAD_TOP;
+    const rows = 9;
+    const slant = 12; // the same slant as the zebra crossing
+    for (let i = 0; i < rows; i++) {
+      const y0 = ROAD_TOP + (h * i) / rows;
+      const y1 = ROAD_TOP + (h * (i + 1)) / rows;
+      const o0 = -slant * (i / rows);
+      const o1 = -slant * ((i + 1) / rows);
+      g.fillStyle(i % 2 === 0 ? 0xffd23f : 0x2d2a32, 1);
+      g.fillPoints(
+        [new Phaser.Math.Vector2(bx - w / 2 + o0, y0), new Phaser.Math.Vector2(bx + w / 2 + o0, y0), new Phaser.Math.Vector2(bx + w / 2 + o1, y1), new Phaser.Math.Vector2(bx - w / 2 + o1, y1)],
+        true,
+      );
+    }
+    // round, raised look: a light edge on the left, a shadow on the right
+    g.lineStyle(5, 0xfff3b0, 0.9);
+    g.lineBetween(bx - w / 2, ROAD_TOP, bx - w / 2 - slant, ROAD_BOTTOM);
+    g.lineStyle(7, C.ink, 0.45);
+    g.lineBetween(bx + w / 2 + 2, ROAD_TOP, bx + w / 2 + 2 - slant, ROAD_BOTTOM);
+
+    // warning sign on the near sidewalk, a little before the bump
+    const sx = bx - 420;
+    const sign = this.add.graphics().setDepth(20);
+    sign.fillStyle(0x4a4650, 1);
+    sign.fillRect(sx - 4, 590, 8, SIDEWALK_FEET_Y + 4 - 590);
+    sign.fillStyle(C.cream, 1);
+    sign.lineStyle(6, C.red, 1);
+    const tri = [new Phaser.Math.Vector2(sx, 520), new Phaser.Math.Vector2(sx + 36, 586), new Phaser.Math.Vector2(sx - 36, 586)];
+    sign.fillPoints(tri, true);
+    sign.strokePoints(tri, true, true);
+    sign.lineStyle(5, C.ink, 1);
+    sign.beginPath();
+    sign.arc(sx, 578, 20, Math.PI * 1.1, Math.PI * 1.9, false);
+    sign.strokePath();
+    sign.lineBetween(sx - 24, 578, sx + 24, 578);
   }
 
   private createStop(data: StopData, last: boolean): void {
@@ -536,6 +598,99 @@ export class DriveScene extends Phaser.Scene {
     audio.oops();
     this.cameras.main.shake(250, 0.006);
     this.showBanner(text, C.red, 1800);
+    if (this.score.takeWarning()) this.startSiren();
+  }
+
+  /** Three mistakes in a row: the police siren wails and the screen flashes red and blue for 3 seconds. */
+  private startSiren(): void {
+    audio.siren(3);
+    this.showBanner(t('siren'), C.blue, 3000, (g) => {
+      g.fillStyle(C.red, 1);
+      g.fillCircle(-12, 0, 13);
+      g.fillStyle(0x3a86ff, 1);
+      g.fillCircle(12, 0, 13);
+      g.lineStyle(3, C.ink, 1);
+      g.strokeCircle(-12, 0, 13);
+      g.strokeCircle(12, 0, 13);
+    });
+    const flash = this.add.graphics().setScrollFactor(0).setDepth(150);
+    let n = 0;
+    this.time.addEvent({
+      delay: 220,
+      repeat: 13,
+      callback: () => {
+        const red = n++ % 2 === 0;
+        flash.clear();
+        flash.fillStyle(red ? 0xe63946 : 0x3a86ff, 0.26);
+        flash.fillRect(0, 0, GAME_W / 2, GAME_H);
+        flash.fillStyle(red ? 0x3a86ff : 0xe63946, 0.26);
+        flash.fillRect(GAME_W / 2, 0, GAME_W / 2, GAME_H);
+      },
+    });
+    this.time.delayedCall(3100, () => flash.destroy());
+  }
+
+  /** The front wheels of the bus reach a speed bump: shake, slow down, and judge the speed. */
+  private checkBumps(prevX: number): void {
+    const axle = this.bus.layout.wheelXs[this.bus.layout.wheelXs.length - 1]! * this.bus.scaleX;
+    for (const bx of this.level.bumps) {
+      if (this.bumpsDone.has(bx) || !(prevX + axle < bx && this.bus.x + axle >= bx)) continue;
+      this.bumpsDone.add(bx);
+      const r = bumpResult(this.v);
+      this.bus.jolt(r.power);
+      audio.bump(r.power);
+      if (r.kind === 'hard') {
+        this.cameras.main.shake(280, 0.006 + 0.008 * r.power);
+        this.mistakeBump(bx);
+      } else if (r.kind === 'gentle') {
+        this.award(r.points, this.bus.x);
+        audio.reward();
+        this.showBanner(t('careful'), C.green, 1300, (g) => drawStar(g, 0, 0, 26, C.yellow, C.ink, 3));
+      }
+      this.v *= r.speedFactor;
+    }
+  }
+
+  private mistakeBump(bx: number): void {
+    this.mistake(t('tooFast'), POINTS.speedBump, bx);
+  }
+
+  private onCrash(c: LaneCrash): void {
+    const cam = this.cameras.main;
+    const visible = c.x > cam.scrollX - 120 && c.x < cam.scrollX + GAME_W + 120;
+    if (c.player === 'follower') {
+      // We drove into somebody: our mistake.
+      if (this.crashCooldown > 0) return;
+      this.crashCooldown = 2.5;
+      this.stun = 1.1;
+      audio.crash();
+      this.sparks(c.x);
+      this.mistake(t('crash'), POINTS.crash, this.bus.x);
+    } else if (c.player === 'leader') {
+      // Somebody ran into us: not our fault, but it hurts.
+      if (this.crashCooldown > 0) return;
+      this.crashCooldown = 1.5;
+      audio.crash();
+      this.sparks(c.x);
+      cam.shake(300, 0.012);
+      this.showBanner(t('bumped'), C.orange, 1800);
+    } else if (visible) {
+      audio.crash();
+      this.sparks(c.x);
+    }
+  }
+
+  private sparks(worldX: number): void {
+    const em = this.add.particles(worldX, GROUND_Y - 70, 'dot', {
+      speed: { min: 90, max: 340 },
+      lifespan: 520,
+      scale: { start: 0.8, end: 0 },
+      tint: [0xffd23f, 0xffffff, 0xf4a261],
+      emitting: false,
+    });
+    em.setDepth(60);
+    em.explode(18);
+    this.time.delayedCall(700, () => em.destroy());
   }
 
   // ---------------------------------------------------------------- bus stop sequence
@@ -631,6 +786,13 @@ export class DriveScene extends Phaser.Scene {
       brake = true;
     }
 
+    // Shaken after a crash: no gas for a moment.
+    if (this.stun > 0) {
+      this.stun -= dt;
+      gas = false;
+      brake = true;
+    }
+
     if (gas && !this.gasTouched) {
       this.gasTouched = true;
       this.startHint?.destroy();
@@ -650,17 +812,35 @@ export class DriveScene extends Phaser.Scene {
     this.v = Phaser.Math.Clamp(this.v, 0, max);
 
     const prevFront = this.bus.frontWorldX();
+    const prevX = this.bus.x;
     const dx = this.v * dt;
     this.bus.x += dx;
+    const cam = this.cameras.main;
+
+    // Other road users. A red light also holds them while people are crossing.
+    this.crashCooldown = Math.max(0, this.crashCooldown - dt);
+    const states = this.signals.map((l) => ({
+      lineX: l.data.lineX,
+      state: l.crossing.busy ? ('red' as LightState) : l.model.state,
+    }));
+    if (this.phase !== 'finishing') {
+      // Traffic in our own lane is solid: we can't drive through it, and it may run into us.
+      const res = this.lane.update(dt, cam.scrollX, states, { x: this.bus.x, len: this.bus.lengthWorld(), v: this.v });
+      if (res.player) {
+        this.bus.x = res.player.x;
+        this.v = Phaser.Math.Clamp(res.player.v, 0, max + 150);
+      }
+      res.crashes.forEach((c) => this.onCrash(c));
+    }
     const front = this.bus.frontWorldX();
     this.bus.roll(dx, dt, this.v / max);
     audio.setEngine(this.v / max);
+    this.checkBumps(prevX);
 
     // Camera + parallax
-    const cam = this.cameras.main;
     cam.scrollX = Phaser.Math.Clamp(this.bus.x - this.camLead, 0, this.level.length - GAME_W);
     this.backdrop.update(cam.scrollX, dt);
-    this.traffic.update(dt, cam.scrollX, this.signals.map((l) => ({ lineX: l.data.lineX, state: l.model.state })));
+    this.traffic.update(dt, cam.scrollX, states);
 
     this.progressBus.x = Phaser.Math.Clamp(this.toBar(this.bus.x), 370, 900);
 
@@ -682,6 +862,18 @@ export class DriveScene extends Phaser.Scene {
       const target = s.data.zoneEnd - 70;
       if (front <= target + 4 && target - front <= d) return true;
     }
+    // Speed bumps: be down to a gentle speed when the front wheels get there.
+    // (It is the front axle that hits the bump, a good way behind the nose of the bus.)
+    const axle = this.bus.x + this.bus.layout.wheelXs[this.bus.layout.wheelXs.length - 1]! * this.bus.scaleX;
+    for (const bx of this.level.bumps) {
+      if (this.bumpsDone.has(bx)) continue;
+      const dist = bx - axle;
+      if (dist < -10 || dist > 700) continue;
+      if (this.v > Math.sqrt((BUMP.gentle - 15) ** 2 + 2 * PHYSICS.brake * Math.max(0, dist - 20))) return true;
+    }
+    // A vehicle in front of us: keep behind it, gently.
+    const lead = this.lane.leaderAhead(front);
+    if (lead && lead.gap <= 70 + Math.max(0, this.v - lead.v) * 0.7) return true;
     return false;
   }
 
@@ -694,7 +886,10 @@ export class DriveScene extends Phaser.Scene {
         this.drawLamps(L);
       }
       // Fairness: a yellow light never turns red while the bus is too close and too fast to stop.
-      const hold = L.model.state === 'yellow' && front < lineX && !canStopBefore(front, lineX, this.v);
+      // And a red light waits until everybody has crossed the zebra.
+      const hold =
+        (L.model.state === 'yellow' && front < lineX && !canStopBefore(front, lineX, this.v)) ||
+        (L.model.state === 'red' && L.crossing.busy);
       if (!hold && L.model.update(dt)) {
         this.drawLamps(L);
         if (L.model.state === 'green' && L.waitedAtRed && front < lineX) {
@@ -704,6 +899,12 @@ export class DriveScene extends Phaser.Scene {
         }
       }
       const state = L.model.state;
+      // Red for the cars: people start to cross (mostly on every red; always on the first one, to teach it).
+      if (state === 'red' && L.prevState !== 'red' && Math.abs(lineX - front) < 1600 && (L.data.teach || Math.random() < 0.8)) {
+        L.crossing.spawnGroup();
+      }
+      L.prevState = state;
+      L.crossing.update(dt);
       const ahead = front < lineX && lineX - front < 800;
 
       if (ahead && state !== 'green' && L.hintFor !== state) {
@@ -759,6 +960,7 @@ export class DriveScene extends Phaser.Scene {
 
   private finishRoute(): void {
     this.phase = 'finishing';
+    this.lane.clear();
     this.gas.reset();
     this.brake.reset();
     audio.horn();

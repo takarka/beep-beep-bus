@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { GAME_W } from '../config';
 import type { LightState } from '../core/traffic';
 import { mulberry32, pick, randRange, type Rng } from '../core/rng';
-import { AI, ONCOMING_STOP_OFFSET, SPECS, nextSpeed, pickKind, spawnDelay, targetSpeed, type VehicleKind } from './ai';
+import { AI, ONCOMING_STOP_OFFSET, SPECS, bumpZones, nextSpeed, pickKind, spawnDelay, targetSpeed, type VehicleKind } from './ai';
 import { CAR_COLORS, MINIBUS_COLORS, VehicleView } from './VehicleView';
 
 /** Wheels of the oncoming lane touch the road here (just above the lane dashes). */
@@ -41,11 +41,14 @@ export class TrafficManager {
   private vehicles: Vehicle[] = [];
   private rng: Rng = mulberry32(Math.floor(Math.random() * 1e9));
   private timer = 1.5;
+  private readonly zones;
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly opts: { night: boolean; level: number },
-  ) {}
+    private readonly opts: { night: boolean; level: number; bumps: readonly number[] },
+  ) {
+    this.zones = bumpZones(opts.bumps, false);
+  }
 
   /** Puts a few vehicles on the road so it isn't empty at the start. */
   prewarm(scrollX: number): void {
@@ -84,10 +87,13 @@ export class TrafficManager {
         front: veh.x - veh.len / 2,
         leaderRear: leader ? leader.x + leader.len / 2 : null,
         lights,
+        zones: this.zones,
       });
       veh.v = nextSpeed(veh.v, target, dt);
       const dx = veh.v * dt;
+      const before = veh.x;
       veh.x -= dx;
+      for (const bx of this.opts.bumps) if (before > bx && veh.x <= bx) this.hop(veh);
       veh.view.setX(veh.x);
       veh.view.roll(dx, veh.scale);
       if (veh.kind === 'police') veh.view.siren(this.scene.time.now);
@@ -102,6 +108,11 @@ export class TrafficManager {
 
     this.timer -= dt;
     if (this.timer <= 0) this.timer = this.trySpawn(scrollX) ? spawnDelay(this.rng, this.opts.level) : 0.4;
+  }
+
+  /** A little hop as the vehicle drives over a bump. */
+  private hop(veh: Vehicle): void {
+    this.scene.tweens.add({ targets: veh.view, y: ONCOMING_GROUND_Y - 7, yoyo: true, duration: 110, ease: 'Quad.easeOut' });
   }
 
   private trySpawn(scrollX: number): boolean {

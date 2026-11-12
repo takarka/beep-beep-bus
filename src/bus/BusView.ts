@@ -102,6 +102,8 @@ export class BusView extends Phaser.GameObjects.Container {
   private passengers = 0;
   private bobT = 0;
   private beamOn = false;
+  private joltTween: Phaser.Tweens.TweenChain | null = null;
+  private joltBase = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number, design: BusDesign) {
     super(scene, x, y);
@@ -116,6 +118,29 @@ export class BusView extends Phaser.GameObjects.Container {
     this.leaves = [];
     this.build();
     this.setPassengers(this.passengers);
+  }
+
+  /** Shaken by a speed bump: the front lifts, then the rear, then the bus settles. `power` is 0..1. */
+  jolt(power: number): void {
+    if (this.joltTween) {
+      this.joltTween.stop();
+      this.setPosition(this.x, this.joltBase).setAngle(0);
+    }
+    this.joltBase = this.y;
+    const hop = 5 + 24 * power;
+    const tilt = 1.2 + 3.4 * power;
+    const base = this.joltBase;
+    this.joltTween = this.scene.tweens.chain({
+      targets: this,
+      tweens: [
+        { y: base - hop * 0.5, angle: -tilt, duration: 90, ease: 'Quad.easeOut' },
+        { y: base - hop, angle: tilt * 0.8, duration: 110 + 60 * power, ease: 'Sine.easeInOut' },
+        { y: base, angle: 0, duration: 180 + 140 * power, ease: 'Bounce.easeOut' },
+      ],
+    });
+    this.joltTween.once('complete', () => {
+      this.joltTween = null;
+    });
   }
 
   /** Night driving: the headlights throw a glowing beam down the road. */

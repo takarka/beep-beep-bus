@@ -22,6 +22,7 @@ export class VehicleView extends Phaser.GameObjects.Container {
   private wheelR = 15;
   private lamps: G | null = null;
   private lastPhase = -1;
+  private badge: G | null = null;
 
   constructor(scene: Phaser.Scene, readonly kind: VehicleKind, color: number, variant: number, night: boolean) {
     super(scene, 0, 0);
@@ -181,6 +182,23 @@ export class VehicleView extends Phaser.GameObjects.Container {
     beam.fillStyle(0xfff0a0, 0.25);
     beam.fillCircle(x, y, 14);
     this.add(beam);
+  }
+
+  /** A red "!" over a driver who follows too close: he may run into us if we stop suddenly. */
+  setHasty(on: boolean): void {
+    if (on && !this.badge) {
+      const g = this.scene.add.graphics({ x: 0, y: this.kind === 'minibus' ? -118 : -90 });
+      g.fillStyle(C.red, 1);
+      g.lineStyle(4, C.ink, 1);
+      g.fillCircle(0, 0, 15);
+      g.strokeCircle(0, 0, 15);
+      g.fillStyle(0xffffff, 1);
+      g.fillRoundedRect(-2.5, -9, 5, 11, 2);
+      g.fillCircle(0, 7, 3);
+      this.badge = g;
+      this.add(g);
+    }
+    this.badge?.setVisible(on);
   }
 
   /** Spin the wheels for `dist` world px of travel. */
