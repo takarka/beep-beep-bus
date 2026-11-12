@@ -1,0 +1,141 @@
+import type { BusDesign } from './design';
+
+/**
+ * Pure bus layout maths (no Phaser). Coordinates are local to the bus:
+ * x = 0 is the middle of the bus, y = 0 is the road (wheels touch it), up is negative.
+ * The bus faces right (+x), driving left → right; doors are on the visible side.
+ */
+
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface BusLayout {
+  backX: number;
+  frontX: number;
+  /** Front of the passenger box (differs from frontX only for the school bus hood). */
+  boxFrontX: number;
+  bottom: number;
+  top: number;
+  height: number;
+  hood: { x0: number; x1: number; top: number } | null;
+  /** y of the floor between decks for the double-decker. */
+  deckY: number | null;
+  wheelR: number;
+  wheelXs: number[];
+  doors: Rect[];
+  windows: Rect[];
+  windshield: Rect;
+  routeSign: Rect;
+  numberBadge: { x: number; y: number; r: number };
+  headlight: { x: number; y: number };
+  taillight: { x: number; y: number };
+}
+
+export const BODY_SIZE = {
+  city: { L: 480, H: 190 },
+  long: { L: 640, H: 190 },
+  double: { L: 500, H: 330 },
+  school: { L: 500, H: 190 },
+} as const;
+
+export const WHEEL_RADIUS = { classic: 36, sport: 36, big: 46, retro: 38 } as const;
+
+export const DOOR_W = 62;
+const HOOD_LEN = 80;
+const GAP = 12;
+const WIN_GAP = 8;
+const WIN_TARGET_W = 84;
+
+function splitWindows(a: number, b: number, y: number, h: number, out: Rect[]): void {
+  const span = b - a;
+  if (span < 36) return;
+  const n = Math.max(1, Math.round(span / WIN_TARGET_W));
+  const w = (span - (n - 1) * WIN_GAP) / n;
+  for (let i = 0; i < n; i++) out.push({ x: a + i * (w + WIN_GAP), y, w, h });
+}
+
+export function computeLayout(d: Pick<BusDesign, 'body' | 'doors' | 'wheels'>): BusLayout {
+  const { L, H } = BODY_SIZE[d.body];
+  const r = WHEEL_RADIUS[d.wheels];
+  const school = d.body === 'school';
+  const double = d.body === 'double';
+
+  const backX = -L / 2;
+  const frontX = L / 2;
+  const boxFrontX = school ? frontX - HOOD_LEN : frontX;
+  const bottom = -Math.round(r * 0.6);
+  const top = bottom - H;
+  const deckY = double ? bottom - Math.round(H * 0.5) : null;
+  const lowerTop = deckY ?? top;
+
+  // Wheels
+  const rearWheel = backX + 82;
+  const wheelXs = [rearWheel];
+  if (d.body === 'long') wheelXs.push(rearWheel + 2 * r + GAP);
+  const frontWheel = school ? frontX - 46 : frontX - 140;
+  wheelXs.push(frontWheel);
+  const rearWheelsEdge = wheelXs[wheelXs.length - 2]! + r;
+
+  // Doors: front door always right behind the windshield, others fill the middle.
+  const doorTop = lowerTop + (double ? 24 : 38);
+  const doorBottom = bottom - 4;
+  const doorH = doorBottom - doorTop;
+  const frontDoorX = boxFrontX - (school ? 14 : 26) - DOOR_W;
+  const regionStart = rearWheelsEdge + GAP;
+  const regionEnd = school ? frontDoorX - GAP : frontWheel - r - GAP;
+
+  const doors: Rect[] = [];
+  if (d.doors === 3) {
+    doors.push({ x: regionStart, y: doorTop, w: DOOR_W, h: doorH });
+    const a = regionStart + DOOR_W + GAP;
+    doors.push({ x: (a + regionEnd) / 2 - DOOR_W / 2, y: doorTop, w: DOOR_W, h: doorH });
+  } else if (d.doors === 2) {
+    doors.push({ x: (regionStart + regionEnd) / 2 - DOOR_W / 2, y: doorTop, w: DOOR_W, h: doorH });
+  }
+  doors.push({ x: frontDoorX, y: doorTop, w: DOOR_W, h: doorH });
+
+  // Windows in the gaps between doors (lower deck), full row on the upper deck.
+  const numberPanelW = 70;
+  const winTop = lowerTop + (double ? 18 : 40);
+  const winH = double ? Math.round(H * 0.5) - 66 : Math.round(H * 0.42);
+  const windows: Rect[] = [];
+  let cursor = backX + numberPanelW;
+  for (const door of doors) {
+    splitWindows(cursor, door.x - WIN_GAP, winTop, winH, windows);
+    cursor = door.x + door.w + WIN_GAP;
+  }
+  if (double) {
+    const upTop = top + 36;
+    const upH = (deckY as number) - 18 - upTop;
+    splitWindows(backX + 18, boxFrontX - 30, upTop, upH, windows);
+  }
+
+  const shieldTop = top + (double ? 36 : 18);
+  const windshield: Rect = { x: boxFrontX - 22, y: shieldTop, w: 16, h: winTop + winH + 12 - shieldTop };
+  const routeSign: Rect = { x: boxFrontX - 196, y: top + 8, w: 150, h: 24 };
+  const numberBadge = { x: backX + 38, y: winTop + winH / 2, r: 26 };
+
+  return {
+    backX,
+    frontX,
+    boxFrontX,
+    bottom,
+    top,
+    height: H,
+    hood: school ? { x0: boxFrontX, x1: frontX, top: bottom - Math.round(H * 0.48) } : null,
+    deckY,
+    wheelR: r,
+    wheelXs,
+    doors,
+    windows,
+    windshield,
+    routeSign,
+    numberBadge,
+    headlight: { x: frontX - 14, y: bottom - 34 },
+    taillight: { x: backX + 8, y: bottom - 36 },
+  };
+}

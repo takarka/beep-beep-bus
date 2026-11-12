@@ -1,0 +1,42 @@
+# Development plan
+
+## ✅ Version 0.1: MVP (done)
+
+- Factory: 7 steps (body ×4, doors 1–3, wheels ×4, colour ×8, headlights ×4, stickers ×4, number 1–3 digits)
+- Route: smooth road, parallax city, bus stops with passengers, traffic lights with random timing
+- Points, a gentle "mistake" (no losing), stars at the end, endless levels (more stops and lights, higher speed)
+- 3 languages (ru/kk/en), synthesized sounds and music, sound/music toggles
+- Saved bus, unlocked level and stars (localStorage)
+- Desktop (keyboard + mouse) and touch (multi-touch pedals); landscape on phones with a "rotate your device" hint
+
+## 🔜 Version 0.2: mobile and polish
+
+- [ ] Phone testing: button sizes, safe areas (notch), fullscreen on the first tap
+- [ ] PWA: install to the home screen, offline play (service worker)
+- [ ] **Voice prompts** in three languages (recorded files: "Stop!", "Bus stop!", "Well done!")
+- [ ] "Simple" mode for 3–4 year olds: one pedal, the bus brakes by itself at stops/red with a hint
+- [ ] Parent settings (behind a "hold for 3 seconds" gate): difficulty, reset progress
+- [ ] Animated passengers (walking, waving), a speech bubble with an icon of where they're going
+
+## 🚀 Version 0.3: more gameplay
+
+- [ ] **Pedestrian crossing**: a pedestrian walks across, you must let them pass (+points)
+- [ ] **STOP sign**, "children" sign, speed bumps
+- [ ] Other cars on the road (keep your distance)
+- [ ] Day / evening / night (turn on the headlights!), rain (wipers)
+- [ ] Different routes: city, village, seaside, mountains
+- [ ] Passengers with a destination: "take me to the park", where the child picks the right stop
+
+## 🎨 Version 0.4: garage and rewards
+
+- [ ] **Garage**: several saved buses, choose before the trip
+- [ ] Points unlock new parts: trolleybus, double-decker with an open roof, spoilers, horns, flags
+- [ ] Sticker album / achievements ("10 stops without mistakes")
+- [ ] Bus photo: save a picture of your bus
+
+## 🛠 Technical
+
+- [ ] E2E tests (Playwright): smoke test "menu → factory → route → result"
+- [ ] CI: build + tests on every push, deploy to GitHub Pages
+- [ ] Move to a separate repository
+- [ ] Optional: artist illustrations instead of procedural graphics (`BusView` and `ui/textures.ts` can be swapped for sprites without touching the logic)
