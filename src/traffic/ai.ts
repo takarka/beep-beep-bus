@@ -17,7 +17,7 @@ export interface VehicleSpec {
 export const SPECS: Record<VehicleKind, VehicleSpec> = {
   car: { length: 150, cruise: [150, 215] },
   police: { length: 160, cruise: [170, 215] },
-  minibus: { length: 210, cruise: [120, 170] },
+  minibus: { length: 230, cruise: [120, 170] },
 };
 
 export const AI = {

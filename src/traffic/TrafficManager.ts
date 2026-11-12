@@ -6,9 +6,12 @@ import { AI, ONCOMING_STOP_OFFSET, SPECS, nextSpeed, pickKind, spawnDelay, targe
 import { CAR_COLORS, MINIBUS_COLORS, VehicleView } from './VehicleView';
 
 /** Wheels of the oncoming lane touch the road here (just above the lane dashes). */
-export const ONCOMING_GROUND_Y = 538;
-/** Slightly smaller than our bus: they are in the far lane. */
-const SCALE = 0.82;
+export const ONCOMING_GROUND_Y = 542;
+/**
+ * Drawing scale per kind, chosen so the proportions to our bus (about 380 px long, 150 px tall) look real:
+ * a car is roughly 45% of its length, a small bus about 60%. A bit smaller than the near lane: perspective.
+ */
+const SCALES: Record<VehicleKind, number> = { car: 1.12, police: 1.12, minibus: 0.92 };
 const MAX_VEHICLES = 7;
 const SPAWN_AHEAD = 320;
 const SPAWN_GAP = 250;
@@ -22,6 +25,7 @@ interface Vehicle {
   cruise: number;
   /** World length (scaled). */
   len: number;
+  scale: number;
 }
 
 export interface SignalState {
@@ -58,10 +62,11 @@ export class TrafficManager {
     const color = kind === 'minibus' ? pick(this.rng, MINIBUS_COLORS) : pick(this.rng, CAR_COLORS);
     const view = new VehicleView(this.scene, kind, color, this.rng() < 0.5 ? 0 : 1, this.opts.night);
     view.setDepth(5);
-    view.setScale(-SCALE, SCALE); // mirrored: drives left
+    const scale = SCALES[kind];
+    view.setScale(-scale, scale); // mirrored: drives left
     view.setPosition(x, ONCOMING_GROUND_Y);
     const cruise = randRange(this.rng, spec.cruise[0], spec.cruise[1]);
-    const vehicle: Vehicle = { kind, view, x, v: cruise, cruise, len: spec.length * SCALE };
+    const vehicle: Vehicle = { kind, view, x, v: cruise, cruise, len: spec.length * scale, scale };
     this.vehicles.push(vehicle);
     return vehicle;
   }
@@ -84,7 +89,7 @@ export class TrafficManager {
       const dx = veh.v * dt;
       veh.x -= dx;
       veh.view.setX(veh.x);
-      veh.view.roll(dx, SCALE);
+      veh.view.roll(dx, veh.scale);
       if (veh.kind === 'police') veh.view.siren(this.scene.time.now);
     });
 

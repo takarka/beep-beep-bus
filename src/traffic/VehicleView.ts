@@ -7,7 +7,7 @@ import type { VehicleKind } from './ai';
 type G = Phaser.GameObjects.Graphics;
 
 export const CAR_COLORS = [0xe63946, 0x3a86ff, 0x57cc99, 0xf4a261, 0x9b5de5, 0xf15bb5, 0x2ec4b6, 0xf1ead8, 0xffd23f];
-export const MINIBUS_COLORS = [0x57cc99, 0xf4a261, 0xf1ead8, 0x3a86ff];
+export const MINIBUS_COLORS = [0xffd23f, 0x57cc99, 0xf4a261, 0x3a86ff, 0xf1ead8];
 const POLICE_WHITE = 0xf4f1de;
 const POLICE_BLUE = 0x3a86ff;
 
@@ -28,12 +28,12 @@ export class VehicleView extends Phaser.GameObjects.Container {
     scene.add.existing(this);
     const shadow = scene.add.graphics();
     shadow.fillStyle(C.shadow, 0.18);
-    shadow.fillEllipse(0, 2, kind === 'minibus' ? 230 : 170, 14);
+    shadow.fillEllipse(0, 2, kind === 'minibus' ? 260 : 170, 14);
     this.add(shadow);
 
     if (kind === 'minibus') this.buildMinibus(color);
     else this.buildCar(color, variant, kind === 'police');
-    if (night) this.addHeadlightBeam(kind === 'minibus' ? 105 : 76, kind === 'minibus' ? -30 : -30);
+    if (night) this.addHeadlightBeam(kind === 'minibus' ? 114 : 76, -30);
   }
 
   private addWheel(x: number, r: number): void {
@@ -104,46 +104,71 @@ export class VehicleView extends Phaser.GameObjects.Container {
     this.siren(0);
   }
 
+  /** A small city bus (midibus): tall box body, big side windows, folding front door, route sign, big wheels. */
   private buildMinibus(color: number): void {
     const g = this.scene.add.graphics();
+    const dark = shade(color, -0.25);
+    const body = { tl: 12, tr: 24, bl: 6, br: 8 };
     g.lineStyle(5, C.ink, 1);
+    // roof air-conditioner hatch
     g.fillStyle(shade(color, -0.12), 1);
-    g.fillRoundedRect(-30, -81, 60, 9, 3);
-    g.strokeRoundedRect(-30, -81, 60, 9, 3);
+    g.fillRoundedRect(-62, -122, 72, 11, 4);
+    g.strokeRoundedRect(-62, -122, 72, 11, 4);
+    // body
     g.fillStyle(color, 1);
-    g.fillRoundedRect(-105, -72, 210, 64, { tl: 10, tr: 28, bl: 6, br: 8 });
-    g.strokeRoundedRect(-105, -72, 210, 64, { tl: 10, tr: 28, bl: 6, br: 8 });
-    g.fillStyle(shade(color, -0.25), 1);
-    g.fillRect(-103, -24, 206, 10);
-    // windows and the sliding door
+    g.fillRoundedRect(-115, -112, 230, 102, body);
+    g.strokeRoundedRect(-115, -112, 230, 102, body);
+    g.fillStyle(dark, 1);
+    g.fillRect(-113, -28, 226, 16);
+    g.fillStyle(0xffffff, 0.85);
+    g.fillRect(-113, -47, 226, 6);
+    // route sign above the windows
+    g.fillStyle(0x1f1c24, 1);
+    g.fillRoundedRect(36, -108, 62, 11, 3);
+    g.fillStyle(0xffb703, 1);
+    g.fillRect(42, -105, 50, 5);
+    // big side windows
     g.fillStyle(C.glass, 1);
     g.lineStyle(3, C.ink, 1);
-    for (const x of [-94, -52, -10]) {
-      g.fillRoundedRect(x, -64, 38, 26, 4);
-      g.strokeRoundedRect(x, -64, 38, 26, 4);
+    for (const x of [-105, -66, -27, 12]) {
+      g.fillRoundedRect(x, -90, 34, 40, 5);
+      g.strokeRoundedRect(x, -90, 34, 40, 5);
+      g.lineStyle(3, 0xffffff, 0.5);
+      g.lineBetween(x + 6, -56, x + 14, -84);
+      g.lineStyle(3, C.ink, 1);
     }
-    const shield = [V(66, -64), V(66, -40), V(98, -40), V(88, -56), V(78, -64)];
+    // folding front door with two glass leaves and a step
+    const dx = 56;
+    const dw = 36;
+    g.fillStyle(shade(color, -0.1), 1);
+    g.fillRect(dx, -98, dw, 88);
+    g.strokeRect(dx, -98, dw, 88);
+    g.fillStyle(C.glass, 1);
+    for (const lx of [dx + 3, dx + dw / 2 + 1]) {
+      g.fillRoundedRect(lx, -92, dw / 2 - 4, 56, 3);
+      g.strokeRoundedRect(lx, -92, dw / 2 - 4, 56, 3);
+    }
+    g.lineBetween(dx + dw / 2, -98, dx + dw / 2, -10);
+    g.fillStyle(0x4a4650, 1);
+    g.fillRect(dx + 2, -15, dw - 4, 5);
+    // windshield seen from the side, at the flat front
+    const shield = [V(100, -94), V(100, -50), V(112, -56), V(112, -84)];
+    g.fillStyle(C.glass, 1);
     g.fillPoints(shield, true);
     g.strokePoints(shield, true, true);
-    g.fillStyle(shade(color, -0.1), 1);
-    g.fillRect(32, -67, 28, 58);
-    g.strokeRect(32, -67, 28, 58);
-    g.fillStyle(C.glass, 1);
-    g.fillRoundedRect(36, -62, 20, 28, 3);
-    g.strokeRoundedRect(36, -62, 20, 28, 3);
     // lamps and bumpers
     g.fillStyle(0xfff3b0, 1);
-    g.fillEllipse(102, -29, 9, 14);
-    g.strokeEllipse(102, -29, 9, 14);
+    g.fillEllipse(111, -30, 8, 14);
+    g.strokeEllipse(111, -30, 8, 14);
     g.fillStyle(C.red, 1);
-    g.fillRect(-106, -40, 5, 14);
+    g.fillRect(-116, -44, 5, 16);
     g.fillStyle(0x4a4650, 1);
-    g.fillRoundedRect(-109, -16, 10, 8, 3);
-    g.fillRoundedRect(98, -16, 10, 8, 3);
+    g.fillRoundedRect(-119, -16, 10, 8, 3);
+    g.fillRoundedRect(108, -16, 10, 8, 3);
     this.add(g);
-    this.add(this.archs([-66, 64], 17));
-    this.addWheel(-66, 17);
-    this.addWheel(64, 17);
+    this.add(this.archs([-72, 68], 20));
+    this.addWheel(-72, 20);
+    this.addWheel(68, 20);
   }
 
   private addHeadlightBeam(x: number, y: number): void {
