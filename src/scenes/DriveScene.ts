@@ -1,7 +1,10 @@
 import Phaser from 'phaser';
 import { audio } from '../audio/AudioEngine';
 import { BusView } from '../bus/BusView';
-import { DEFAULT_DESIGN, loadDesign } from '../bus/design';
+import { DEFAULT_DESIGN } from '../bus/design';
+import { loadDesign } from '../bus/garage';
+import { DRIVE_SCALE } from '../bus/geometry';
+import { getSettings, updateSettings } from '../core/settings';
 import { C, GAME_H, GAME_W } from '../config';
 import { START_X, generateLevel, type LevelData, type LightData, type StopData } from '../core/level';
 import { mulberry32 } from '../core/rng';
@@ -11,21 +14,22 @@ import {
   crossedLine,
   hasMissedStop,
   isInStopZone,
+  PHYSICS,
+  brakingDistance,
+  canStopBefore,
   isWaitingBeforeLine,
 } from '../core/rules';
 import { TrafficLightModel, type LightState } from '../core/traffic';
 import { t } from '../i18n';
 import { Icons, drawMiniLight, drawStar, drawStopSign } from '../ui/draw';
-import { Backdrop, GROUND_Y, PASSENGER_VARIANTS, SIDEWALK_FEET_Y, STREET_Y } from '../ui/textures';
+import { GROUND_Y, PASSENGER_VARIANTS, SIDEWALK_FEET_Y, STREET_Y } from '../ui/textures';
+import { createScenery } from '../ui/scenery';
+import { precipKind, resolveEnv } from '../core/world';
 import { Button, HoldButton, floatText, label } from '../ui/widgets';
 import { addAudioToggles } from './MenuScene';
 
 type G = Phaser.GameObjects.Graphics;
 
-const BUS_SCALE = 0.8;
-const ACCEL = 360;
-const COAST_DECEL = 230;
-const BRAKE_DECEL = 950;
 const ROAD_TOP = STREET_Y + 50;
 const ROAD_BOTTOM = STREET_Y + 180;
 const PAX_SCALE = 0.85;
@@ -60,7 +64,7 @@ export interface DriveResult {
 
 export class DriveScene extends Phaser.Scene {
   private level!: LevelData;
-  private backdrop!: Backdrop;
+  private backdrop!: ReturnType<typeof createScenery>;
   private bus!: BusView;
   private score!: ScoreKeeper;
   private stops: StopRt[] = [];
@@ -71,6 +75,10 @@ export class DriveScene extends Phaser.Scene {
   private aboard = 0;
   private paused = false;
   private gasTouched = false;
+  private assist = false;
+  private lastHorn = -1000;
+  /** Screen x of the bus centre; leaves more road visible ahead of the bus. */
+  private camLead = 360;
   private rng = mulberry32(1);
 
   private gas!: HoldButton;
@@ -99,6 +107,7 @@ export class DriveScene extends Phaser.Scene {
     this.aboard = 0;
     this.paused = false;
     this.gasTouched = false;
+    this.assist = getSettings().assist;
     this.banner = null;
     this.pauseLayer = null;
     this.rng = mulberry32(this.level.level * 31 + 5);
@@ -107,11 +116,14 @@ export class DriveScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.fadeIn(300, 45, 42, 50);
     this.cameras.main.setBounds(0, 0, this.level.length, GAME_H);
-    this.backdrop = new Backdrop(this);
+    const env = resolveEnv(this.level.level, getSettings().world);
+    this.backdrop = createScenery(this, env);
 
     const design = loadDesign() ?? { ...DEFAULT_DESIGN };
     this.bus = new BusView(this, START_X, GROUND_Y, design);
-    this.bus.setScale(BUS_SCALE).setDepth(10);
+    this.bus.setScale(DRIVE_SCALE[design.body]).setDepth(10);
+    this.camLead = 140 + this.bus.lengthWorld() / 2;
+    this.bus.setNight(env.time === 'night');
     this.bus.setPassengers(0);
 
     const stopsTotal = this.level.items.filter((i) => i.kind === 'stop').length;
@@ -125,7 +137,12 @@ export class DriveScene extends Phaser.Scene {
     this.createControls();
 
     audio.startEngine();
-    this.events.once('shutdown', () => audio.stopEngine());
+    const rain = env.precip && precipKind(env) === 'rain';
+    if (rain) audio.startRain();
+    this.events.once('shutdown', () => {
+      audio.stopEngine();
+      audio.stopRain();
+    });
 
     this.showStartHint();
   }
@@ -356,6 +373,17 @@ export class DriveScene extends Phaser.Scene {
     this.gas = new HoldButton(this, GAME_W - 120, GAME_H - 110, 76, C.green, (g, s) => Icons.gas(g, s));
     for (const b of [this.brake, this.gas]) b.setScrollFactor(0, 0, true).setDepth(95);
 
+    // Horn: reacts the moment it is touched
+    const horn = new Button(this, GAME_W - 292, GAME_H - 84, {
+      r: 50,
+      color: C.yellow,
+      icon: (g, s) => Icons.horn(g, s, C.ink),
+      silent: true,
+      onDown: () => this.honk(),
+      onClick: () => undefined,
+    });
+    horn.setScrollFactor(0, 0, true).setDepth(95);
+
     const kb = this.input.keyboard;
     if (kb) {
       const K = Phaser.Input.Keyboard.KeyCodes;
@@ -364,8 +392,19 @@ export class DriveScene extends Phaser.Scene {
       }) as DriveScene['keys'];
       kb.on('keydown-ESC', () => this.setPaused(!this.paused));
       kb.on('keydown-P', () => this.setPaused(!this.paused));
-      kb.on('keydown-H', () => audio.horn());
+      kb.on('keydown-H', () => this.honk());
     }
+  }
+
+  private honk(): void {
+    if (this.paused || this.phase === 'ended') return;
+    const now = this.time.now;
+    if (now - this.lastHorn < 350) return;
+    this.lastHorn = now;
+    audio.horn();
+    floatText(this, this.bus.frontWorldX() - 40, 400, t('beep'), C.yellow, 44);
+    const s = this.bus.scaleX;
+    this.tweens.add({ targets: this.bus, scaleY: s * 0.93, yoyo: true, duration: 90, onComplete: () => this.bus.setScale(s) });
   }
 
   private showStartHint(): void {
@@ -395,7 +434,7 @@ export class DriveScene extends Phaser.Scene {
     // Centred over the bus (left part of the screen) so it never hides the traffic light ahead.
     const txt = label(this, 0, 0, text, { size: 36, color: C.cream });
     const w0 = txt.width + (icon ? 110 : 60);
-    const cx = Phaser.Math.Clamp(440, w0 / 2 + 16, GAME_W - w0 / 2 - 16);
+    const cx = Phaser.Math.Clamp(this.camLead + 40, w0 / 2 + 16, GAME_W - w0 / 2 - 16);
     const c = this.add.container(cx, 160).setScrollFactor(0).setDepth(97);
     txt.x = icon ? 30 : 0;
     const w = txt.width + (icon ? 110 : 60);
@@ -427,14 +466,28 @@ export class DriveScene extends Phaser.Scene {
       const dim = this.add.rectangle(0, 0, GAME_W, GAME_H, C.ink, 0.6).setOrigin(0).setInteractive();
       const panel = this.add.graphics();
       panel.fillStyle(C.cream, 1);
-      panel.fillRoundedRect(GAME_W / 2 - 300, 180, 600, 340, 30);
+      panel.fillRoundedRect(GAME_W / 2 - 370, 180, 740, 340, 30);
       panel.lineStyle(6, C.ink, 1);
-      panel.strokeRoundedRect(GAME_W / 2 - 300, 180, 600, 340, 30);
+      panel.strokeRoundedRect(GAME_W / 2 - 370, 180, 740, 340, 30);
       const title = label(this, GAME_W / 2, 250, t('paused'), { size: 54, color: C.yellow });
-      const resume = new Button(this, GAME_W / 2, 400, { r: 70, color: C.green, icon: (g, s) => Icons.play(g, s), onClick: () => this.setPaused(false) });
-      const retry = new Button(this, GAME_W / 2 - 170, 410, { r: 50, color: C.orange, icon: (g, s) => Icons.retry(g, s), onClick: () => this.scene.restart({ level: this.level.level }) });
-      const home = new Button(this, GAME_W / 2 + 170, 410, { r: 50, color: C.red, icon: (g, s) => Icons.home(g, s), onClick: () => this.scene.start('Menu') });
-      layer.add([dim, panel, title, resume, retry, home]);
+      const cx = GAME_W / 2;
+      const resume = new Button(this, cx, 395, { r: 68, color: C.green, icon: (g, s) => Icons.play(g, s), onClick: () => this.setPaused(false) });
+      const retry = new Button(this, cx - 160, 405, { r: 46, color: C.orange, icon: (g, s) => Icons.retry(g, s), onClick: () => this.scene.restart({ level: this.level.level }) });
+      const home = new Button(this, cx - 290, 405, { r: 46, color: C.red, icon: (g, s) => Icons.home(g, s), onClick: () => this.scene.start('Menu') });
+      const edit = new Button(this, cx + 160, 405, { r: 46, color: C.purple, icon: (g, s) => Icons.bus(g, s), onClick: () => this.scene.start('Garage') });
+      const helper: Button = new Button(this, cx + 290, 405, {
+        r: 46,
+        color: this.assist ? C.green : 0xb9b0a0,
+        icon: (g, s) => Icons.wheel(g, s),
+        onClick: () => {
+          this.assist = !this.assist;
+          updateSettings({ assist: this.assist });
+          helper.setColor(this.assist ? C.green : 0xb9b0a0);
+        },
+      });
+      const helperLabel = label(this, cx + 290, 484, t('assist'), { size: 20, color: C.ink, strokeThickness: 0, wrap: 120 });
+      const editLabel = label(this, cx + 160, 484, t('garage'), { size: 20, color: C.ink, strokeThickness: 0, wrap: 120 });
+      layer.add([dim, panel, title, resume, retry, home, edit, helper, helperLabel, editLabel]);
       // Children need scrollFactor 0 too, otherwise their hit areas shift with the camera.
       layer.setScrollFactor(0, 0, true);
       this.pauseLayer = layer;
@@ -556,8 +609,14 @@ export class DriveScene extends Phaser.Scene {
     if (this.paused || this.phase === 'ended') return;
     const dt = Math.min(delta / 1000, 0.05);
     const k = this.keys;
-    const gas = this.gas.isDown || (k && (k.right.isDown || k.up.isDown || k.d.isDown || k.w.isDown));
-    const brake = this.brake.isDown || (k && (k.left.isDown || k.down.isDown || k.a.isDown || k.s.isDown || k.space.isDown));
+    let gas = Boolean(this.gas.isDown || (k && (k.right.isDown || k.up.isDown || k.d.isDown || k.w.isDown)));
+    let brake = Boolean(this.brake.isDown || (k && (k.left.isDown || k.down.isDown || k.a.isDown || k.s.isDown || k.space.isDown)));
+
+    // "Helper" mode: the bus brakes by itself before red lights and bus stops.
+    if (this.assist && this.phase === 'driving' && this.autoBrakeNeeded(this.bus.frontWorldX())) {
+      gas = false;
+      brake = true;
+    }
 
     if (gas && !this.gasTouched) {
       this.gasTouched = true;
@@ -567,9 +626,9 @@ export class DriveScene extends Phaser.Scene {
 
     const max = this.level.maxSpeed;
     if (this.phase === 'driving') {
-      if (brake) this.v -= BRAKE_DECEL * dt;
-      else if (gas) this.v += ACCEL * dt;
-      else this.v -= COAST_DECEL * dt;
+      if (brake) this.v -= PHYSICS.brake * dt;
+      else if (gas) this.v += PHYSICS.accel * dt;
+      else this.v -= PHYSICS.coast * dt;
     } else if (this.phase === 'finishing') {
       this.v = Math.max(this.v, 260);
     } else {
@@ -586,7 +645,7 @@ export class DriveScene extends Phaser.Scene {
 
     // Camera + parallax
     const cam = this.cameras.main;
-    cam.scrollX = Phaser.Math.Clamp(this.bus.x - 440, 0, this.level.length - GAME_W);
+    cam.scrollX = Phaser.Math.Clamp(this.bus.x - this.camLead, 0, this.level.length - GAME_W);
     this.backdrop.update(cam.scrollX, dt);
 
     this.progressBus.x = Phaser.Math.Clamp(this.toBar(this.bus.x), 370, 900);
@@ -597,15 +656,32 @@ export class DriveScene extends Phaser.Scene {
     if (this.phase === 'driving' && front >= this.level.finishX) this.finishRoute();
   }
 
+  /** True when the helper should be braking: the bus would otherwise overshoot a stop point. */
+  private autoBrakeNeeded(front: number): boolean {
+    const d = brakingDistance(this.v) + 25;
+    for (const L of this.signals) {
+      const target = L.data.lineX - 45;
+      if (L.model.state !== 'green' && front <= target + 4 && target - front <= d) return true;
+    }
+    for (const s of this.stops) {
+      if (s.state !== 'waiting') continue;
+      const target = s.data.zoneEnd - 70;
+      if (front <= target + 4 && target - front <= d) return true;
+    }
+    return false;
+  }
+
   private updateLights(dt: number, prevFront: number, front: number, gas: boolean): void {
     for (const L of this.signals) {
       const lineX = L.data.lineX;
-      if (L.data.teach && !L.forced && front < lineX && lineX - front < 650) {
+      if (L.data.teach && !L.forced && front < lineX && lineX - front < 900) {
         L.model.forceToRed();
         L.forced = true;
         this.drawLamps(L);
       }
-      if (L.model.update(dt)) {
+      // Fairness: a yellow light never turns red while the bus is too close and too fast to stop.
+      const hold = L.model.state === 'yellow' && front < lineX && !canStopBefore(front, lineX, this.v);
+      if (!hold && L.model.update(dt)) {
         this.drawLamps(L);
         if (L.model.state === 'green' && L.waitedAtRed && front < lineX) {
           audio.select();
@@ -614,7 +690,7 @@ export class DriveScene extends Phaser.Scene {
         }
       }
       const state = L.model.state;
-      const ahead = front < lineX && lineX - front < 600;
+      const ahead = front < lineX && lineX - front < 800;
 
       if (ahead && state !== 'green' && L.hintFor !== state) {
         L.hintFor = state;
@@ -643,7 +719,7 @@ export class DriveScene extends Phaser.Scene {
     for (const s of this.stops) {
       if (s.state !== 'waiting') continue;
       const z = s.data.zoneEnd;
-      if (!s.announced && z - front < 750 && front < z) {
+      if (!s.announced && z - front < 1000 && front < z) {
         s.announced = true;
         audio.dingDong();
         this.showBanner(t('busStop'), C.blue, 1500, (g) => drawStopSign(g, 0, 0, 26));

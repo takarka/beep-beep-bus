@@ -1,6 +1,4 @@
-import { loadJSON, saveJSON } from '../core/storage';
-
-export const BODY_TYPES = ['city', 'long', 'double', 'school'] as const;
+export const BODY_TYPES = ['city', 'bendy', 'double', 'school'] as const;
 export const DOOR_COUNTS = [1, 2, 3] as const;
 export const WHEEL_TYPES = ['classic', 'sport', 'big', 'retro'] as const;
 export const LIGHT_TYPES = ['round', 'square', 'eyes', 'star'] as const;
@@ -55,7 +53,8 @@ export function sanitizeDesign(raw: unknown): BusDesign {
       ? r.color
       : DEFAULT_DESIGN.color;
   return {
-    body: oneOf(BODY_TYPES, r.body, DEFAULT_DESIGN.body),
+    // Older saves used a plain "long" bus, which became the articulated one.
+    body: oneOf(BODY_TYPES, r.body === 'long' ? 'bendy' : r.body, DEFAULT_DESIGN.body),
     doors: oneOf(DOOR_COUNTS, r.doors, DEFAULT_DESIGN.doors),
     wheels: oneOf(WHEEL_TYPES, r.wheels, DEFAULT_DESIGN.wheels),
     color,
@@ -63,15 +62,4 @@ export function sanitizeDesign(raw: unknown): BusDesign {
     decor: oneOf(DECOR_TYPES, r.decor, DEFAULT_DESIGN.decor),
     number: normalizeNumber(r.number),
   };
-}
-
-const KEY = 'bbbus.design.v1';
-
-export function loadDesign(): BusDesign | null {
-  const raw = loadJSON(KEY);
-  return raw ? sanitizeDesign(raw) : null;
-}
-
-export function saveDesign(d: BusDesign): void {
-  saveJSON(KEY, sanitizeDesign(d));
 }

@@ -1,13 +1,16 @@
 import Phaser from 'phaser';
 import { audio } from '../audio/AudioEngine';
 import { BusView } from '../bus/BusView';
-import { DEFAULT_DESIGN, loadDesign } from '../bus/design';
+import { DEFAULT_DESIGN } from '../bus/design';
+import { loadDesign } from '../bus/garage';
+import { DRIVE_SCALE } from '../bus/geometry';
 import { C, GAME_W } from '../config';
 import { loadProgress } from '../core/progress';
 import { getSettings, updateSettings } from '../core/settings';
 import { DICTS, LANGS, t } from '../i18n';
 import { Icons } from '../ui/draw';
-import { Backdrop, GROUND_Y } from '../ui/textures';
+import { GROUND_Y } from '../ui/textures';
+import { createScenery, currentEnv } from '../ui/scenery';
 import { Button, label } from '../ui/widgets';
 
 /** Sound + music toggles, reused by every scene. */
@@ -35,8 +38,10 @@ export function addAudioToggles(scene: Phaser.Scene, x: number, y: number): void
   musicBtn.setScrollFactor(0).setDepth(90);
 }
 
+const ASSIST_OFF = 0xb9b0a0;
+
 export class MenuScene extends Phaser.Scene {
-  private backdrop!: Backdrop;
+  private backdrop!: ReturnType<typeof createScenery>;
   private scrollX = 0;
   private bus!: BusView;
 
@@ -47,43 +52,45 @@ export class MenuScene extends Phaser.Scene {
   create(): void {
     audio.startMusic();
     this.scrollX = 0;
-    this.backdrop = new Backdrop(this);
+    const env = currentEnv();
+    this.backdrop = createScenery(this, env, { behindUi: true });
 
     const title = label(this, GAME_W / 2, 118, t('title'), { size: 92, color: C.yellow, strokeThickness: 14 });
     this.tweens.add({ targets: title, angle: { from: -2, to: 2 }, yoyo: true, repeat: -1, duration: 1400, ease: 'Sine.easeInOut' });
 
     const saved = loadDesign();
-    this.bus = new BusView(this, GAME_W / 2 - 40, GROUND_Y, saved ?? { ...DEFAULT_DESIGN });
-    this.bus.setScale(0.8);
+    const design = saved ?? { ...DEFAULT_DESIGN };
+    this.bus = new BusView(this, GAME_W / 2, GROUND_Y, design);
+    this.bus.setScale(DRIVE_SCALE[design.body]);
+    this.bus.setNight(env.time === 'night');
     this.bus.setPassengers(3);
-    // Tap the bus to honk — small kids love it.
-    this.bus.setInteractive(new Phaser.Geom.Rectangle(-300, -400, 600, 400), Phaser.Geom.Rectangle.Contains);
+    // Tap the bus to honk: small kids love it.
+    this.bus.setInteractive(new Phaser.Geom.Rectangle(-420, -400, 840, 400), Phaser.Geom.Rectangle.Contains);
     this.bus.on('pointerdown', () => {
       audio.horn();
-      this.tweens.add({ targets: this.bus, scaleY: 0.74, yoyo: true, duration: 120 });
+      const s = this.bus.scaleX;
+      this.tweens.add({ targets: this.bus, scaleY: s * 0.93, yoyo: true, duration: 120, onComplete: () => this.bus.setScale(s) });
     });
 
-    // Main play button → factory
-    const play = new Button(this, GAME_W / 2 + 330, 300, {
+    // Play: straight to the route if the bus is already built, otherwise to the factory.
+    const play = new Button(this, GAME_W - 190, 290, {
       r: 82,
       color: C.green,
       icon: (g, s) => Icons.play(g, s),
-      onClick: () => this.go('Factory'),
+      onClick: () => this.go(saved ? 'Drive' : 'Factory', saved ? { level: loadProgress().level } : undefined),
     });
     this.tweens.add({ targets: play, scale: { from: 1, to: 1.08 }, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' });
     label(this, play.x, play.y + 112, t('play'), { size: 30 });
+    if (saved) label(this, play.x, play.y + 150, `${t('level')} ${loadProgress().level}`, { size: 22, strokeThickness: 4 });
 
-    // Quick start with the saved bus
-    if (saved) {
-      const level = loadProgress().level;
-      new Button(this, GAME_W / 2 - 360, 300, {
-        r: 62,
-        color: C.orange,
-        icon: (g, s) => Icons.flag(g, s),
-        onClick: () => this.go('Drive', { level }),
-      });
-      label(this, GAME_W / 2 - 360, 392, `${t('drive')} · ${level}`, { size: 26 });
-    }
+    // Edit the bus: always reachable from here (and from pause / results)
+    new Button(this, 190, 290, {
+      r: 62,
+      color: C.purple,
+      icon: (g, s) => Icons.bus(g, s),
+      onClick: () => this.go('Garage'),
+    });
+    label(this, 190, 290 + 94, t('garage'), { size: 28 });
 
     // Language badges
     LANGS.forEach((lang, i) => {
@@ -102,6 +109,42 @@ export class MenuScene extends Phaser.Scene {
     });
 
     addAudioToggles(this, GAME_W - 56, 52);
+
+    // Fullscreen (not available on iPhone Safari: there the game is installed to the home screen instead)
+    if (this.scale.fullscreen.available) {
+      new Button(this, GAME_W - 224, 52, {
+        r: 34,
+        color: C.orange,
+        icon: (g, s) => Icons.fullscreen(g, s),
+        onClick: () => {
+          this.scale.toggleFullscreen();
+          const lock = (screen.orientation as ScreenOrientation & { lock?: (o: string) => Promise<void> }).lock;
+          if (lock) void lock.call(screen.orientation, 'landscape').catch(() => undefined);
+        },
+      });
+    }
+
+    // Weather / season / day-night
+    new Button(this, GAME_W - 70, 650, {
+      r: 36,
+      color: C.blue,
+      icon: (g, s) => Icons.weather(g, s),
+      onClick: () => this.go('World'),
+    });
+    label(this, GAME_W - 118, 650, t('world'), { size: 28, color: C.ink, stroke: C.cream, strokeThickness: 5 }).setOrigin(1, 0.5);
+
+    // "Helper" mode for the youngest players: the bus brakes by itself.
+    const helper: Button = new Button(this, 70, 650, {
+      r: 36,
+      color: getSettings().assist ? C.green : ASSIST_OFF,
+      icon: (g, s) => Icons.wheel(g, s),
+      onClick: () => {
+        const on = !getSettings().assist;
+        updateSettings({ assist: on });
+        helper.setColor(on ? C.green : ASSIST_OFF);
+      },
+    });
+    label(this, 118, 650, t('assist'), { size: 28, color: C.ink, stroke: C.cream, strokeThickness: 5 }).setOrigin(0, 0.5);
   }
 
   private go(scene: string, data?: object): void {

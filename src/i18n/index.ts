@@ -36,6 +36,14 @@ const en = {
   continue: 'Continue',
   rotate: 'Please turn your device sideways',
   holdGas: 'Hold the green pedal to drive',
+  garage: 'Garage',
+  world: 'Weather',
+  assist: 'Helper',
+  beep: 'Beep!',
+  body_city: 'City',
+  body_bendy: 'Bendy',
+  body_double: 'Double-decker',
+  body_school: 'School',
 };
 
 export type TextKey = keyof typeof en;
@@ -75,6 +83,14 @@ const ru: Dict = {
   continue: 'Продолжить',
   rotate: 'Поверни устройство горизонтально',
   holdGas: 'Нажми зелёную педаль, чтобы ехать',
+  garage: 'Гараж',
+  world: 'Погода',
+  assist: 'Помощник',
+  beep: 'Бип!',
+  body_city: 'Городской',
+  body_bendy: 'Гармошка',
+  body_double: 'Двухэтажный',
+  body_school: 'Школьный',
 };
 
 const kk: Dict = {
@@ -111,6 +127,14 @@ const kk: Dict = {
   continue: 'Жалғастыру',
   rotate: 'Құрылғыны көлденең бұр',
   holdGas: 'Жүру үшін жасыл педальды бас',
+  garage: 'Гараж',
+  world: 'Ауа райы',
+  assist: 'Көмекші',
+  beep: 'Бип!',
+  body_city: 'Қалалық',
+  body_bendy: 'Гармонь',
+  body_double: 'Екі қабатты',
+  body_school: 'Мектеп',
 };
 
 export const LANGS = ['ru', 'kk', 'en'] as const;

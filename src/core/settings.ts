@@ -1,5 +1,6 @@
 import { detectLang, isLang, setLang, type Lang } from '../i18n';
 import { loadJSON, saveJSON } from './storage';
+import { DEFAULT_WORLD, sanitizeWorld, type WorldSetting } from './world';
 
 const KEY = 'bbbus.settings.v1';
 
@@ -7,6 +8,10 @@ export interface Settings {
   lang: Lang;
   sound: boolean;
   music: boolean;
+  /** "Helper" mode: the bus brakes by itself at red lights and bus stops. */
+  assist: boolean;
+  /** Season / day-night / weather chosen on the weather screen (or "auto"). */
+  world: WorldSetting;
 }
 
 type Listener = (s: Settings) => void;
@@ -19,6 +24,8 @@ function load(): Settings {
     lang: raw && isLang(raw.lang) ? raw.lang : detectLang(navLangs),
     sound: raw?.sound ?? true,
     music: raw?.music ?? true,
+    assist: raw?.assist ?? false,
+    world: raw?.world ? sanitizeWorld(raw.world) : { ...DEFAULT_WORLD },
   };
 }
 

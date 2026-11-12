@@ -31,7 +31,10 @@ export interface LevelData {
 }
 
 export const START_X = 470;
-const FIRST_ITEM_X = 1700;
+const FIRST_ITEM_X = 2300;
+/** Minimum / maximum distance between two neighbouring lights or stops (world px). */
+export const MIN_GAP = 2100;
+export const MAX_GAP = 2700;
 
 export function levelCounts(level: number): { stops: number; lights: number } {
   const n = Math.min(2 + Math.max(1, level), 7);
@@ -65,7 +68,7 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
     } else {
       items.push({ kind, zoneEnd: x, waiting: randInt(rng, 1, 4), exiting: randInt(rng, 0, 3) });
     }
-    x += randInt(rng, 1100, 1500);
+    x += randInt(rng, MIN_GAP, MAX_GAP);
   }
 
   const finishX = x;
@@ -74,6 +77,6 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
     items,
     finishX,
     length: finishX + 1400,
-    maxSpeed: Math.min(430 + (level - 1) * 30, 580),
+    maxSpeed: Math.min(340 + (level - 1) * 25, 500),
   };
 }

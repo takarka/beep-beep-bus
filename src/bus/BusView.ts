@@ -101,6 +101,7 @@ export class BusView extends Phaser.GameObjects.Container {
   private leaves: G[] = [];
   private passengers = 0;
   private bobT = 0;
+  private beamOn = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number, design: BusDesign) {
     super(scene, x, y);
@@ -115,6 +116,13 @@ export class BusView extends Phaser.GameObjects.Container {
     this.leaves = [];
     this.build();
     this.setPassengers(this.passengers);
+  }
+
+  /** Night driving: the headlights throw a glowing beam down the road. */
+  setNight(on: boolean): void {
+    if (on === this.beamOn) return;
+    this.beamOn = on;
+    this.setDesign(this.design);
   }
 
   /** World x positions of the door centres (for passengers to walk to). */
@@ -222,9 +230,10 @@ export class BusView extends Phaser.GameObjects.Container {
     // Roof unit (retro detail)
     g.fillStyle(shade(body, -0.1), 1);
     g.lineStyle(4, ink, 1);
-    const roofX = L.backX + boxW * 0.3;
-    g.fillRoundedRect(roofX, L.top - 14, boxW * 0.28, 18, { tl: 8, tr: 8, bl: 2, br: 2 });
-    g.strokeRoundedRect(roofX, L.top - 14, boxW * 0.28, 18, { tl: 8, tr: 8, bl: 2, br: 2 });
+    const roofX = L.joint ? L.joint.x1 + 60 : L.backX + boxW * 0.3;
+    const roofW = L.joint ? 140 : boxW * 0.28;
+    g.fillRoundedRect(roofX, L.top - 14, roofW, 18, { tl: 8, tr: 8, bl: 2, br: 2 });
+    g.strokeRoundedRect(roofX, L.top - 14, roofW, 18, { tl: 8, tr: 8, bl: 2, br: 2 });
 
     // Main body
     const radii = { tl: 18, tr: L.hood ? 14 : double ? 34 : 44, bl: 10, br: L.hood ? 4 : 14 };
@@ -265,6 +274,23 @@ export class BusView extends Phaser.GameObjects.Container {
     if (double) {
       g.lineStyle(3, bodyDark, 1);
       g.lineBetween(L.backX + 4, L.deckY as number, L.boxFrontX - 4, L.deckY as number);
+    }
+
+    // Accordion joint of the articulated bus: dark folded bellows between the two sections.
+    if (L.joint) {
+      const j = L.joint;
+      const jt = L.top + 3;
+      const jb = L.bottom - 3;
+      g.fillStyle(0x24212a, 1);
+      g.fillRoundedRect(j.x0, jt, j.x1 - j.x0, jb - jt, 8);
+      g.lineStyle(4, 0x58525f, 1);
+      for (let x = j.x0 + 8; x < j.x1 - 4; x += 8) g.lineBetween(x, jt + 8, x, jb - 8);
+      g.lineStyle(5, ink, 1);
+      g.strokeRoundedRect(j.x0, jt, j.x1 - j.x0, jb - jt, 8);
+      // rubber "roof" cap over the bellows
+      g.fillStyle(0x3b3640, 1);
+      g.fillRoundedRect(j.x0 - 4, L.top - 6, j.x1 - j.x0 + 8, 16, 6);
+      g.strokeRoundedRect(j.x0 - 4, L.top - 6, j.x1 - j.x0 + 8, 16, 6);
     }
 
     // Windows (glass)
@@ -365,6 +391,22 @@ export class BusView extends Phaser.GameObjects.Container {
     for (const wx of L.wheelXs) {
       g3.slice(wx, -L.wheelR, L.wheelR + 7, Math.PI, 0, false);
       g3.fillPath();
+    }
+
+    if (this.beamOn) {
+      const beam = new Phaser.GameObjects.Graphics(scene);
+      beam.setBlendMode(Phaser.BlendModes.ADD);
+      const hx = L.headlight.x + 8;
+      const hy = L.headlight.y;
+      const v = (x: number, y: number) => new Phaser.Math.Vector2(x, y);
+      // Soft falloff: several nested cones, each a little shorter and narrower.
+      for (const f of [1, 0.78, 0.56, 0.36, 0.2]) {
+        beam.fillStyle(0xfff0a0, 0.065);
+        beam.fillPoints([v(hx, hy - 6), v(hx + 640 * f, hy - 70 * f), v(hx + 640 * f, hy + 62 * f), v(hx, hy + 8)], true);
+      }
+      beam.fillStyle(0xfff0a0, 0.28);
+      beam.fillCircle(hx - 6, hy, 26);
+      this.add(beam);
     }
 
     // Wheels (outside bodyC so the body can bounce on its "suspension")

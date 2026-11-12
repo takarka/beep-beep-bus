@@ -10,11 +10,10 @@ import {
   LIGHT_TYPES,
   MAX_NUMBER_DIGITS,
   WHEEL_TYPES,
-  loadDesign,
   normalizeNumber,
-  saveDesign,
   type BusDesign,
 } from '../bus/design';
+import { loadGarage, saveDesign, slotForNewBus } from '../bus/garage';
 import { BODY_SIZE } from '../bus/geometry';
 import { C, FONT, GAME_H, GAME_W } from '../config';
 import { loadProgress } from '../core/progress';
@@ -133,15 +132,24 @@ export class FactoryScene extends Phaser.Scene {
   private optionButtons: Array<{ btn: Button; isSelected: () => boolean }> = [];
   private finished = false;
 
+  private slot = 0;
+
   constructor() {
     super('Factory');
+  }
+
+  /** `slot`: which garage place is being built or edited (default: the current bus, or a free place). */
+  init(data: { slot?: number }): void {
+    const g = loadGarage();
+    this.slot = Number.isInteger(data?.slot) ? (data.slot as number) : g.slots[g.current] ? g.current : slotForNewBus(g);
   }
 
   create(): void {
     this.stepIdx = 0;
     this.finished = false;
     this.stepDots = [];
-    this.design = loadDesign() ?? { ...DEFAULT_DESIGN };
+    const garage = loadGarage();
+    this.design = garage.slots[this.slot] ?? { ...DEFAULT_DESIGN };
     this.cameras.main.fadeIn(250, 45, 42, 50);
 
     drawFactory(this);
@@ -163,8 +171,18 @@ export class FactoryScene extends Phaser.Scene {
     });
     this.stepTitle = label(this, GAME_W / 2, 118, '', { size: 34 });
 
-    new Button(this, 56, 52, { r: 34, color: C.red, icon: (g, s) => Icons.home(g, s), onClick: () => this.scene.start('Menu') });
+    new Button(this, 56, 52, { r: 34, color: C.red, icon: (g, s) => Icons.home(g, s), onClick: () => this.scene.start('Garage') });
     addAudioToggles(this, GAME_W - 56, 52);
+    // Go driving straight away, from any step
+    new Button(this, GAME_W - 224, 52, {
+      r: 34,
+      color: C.green,
+      icon: (g, s) => Icons.play(g, s),
+      onClick: () => {
+        saveDesign(this.design, this.slot);
+        this.scene.start('Drive', { level: loadProgress().level });
+      },
+    });
 
     this.backBtn = new Button(this, 70, 360, { r: 50, color: C.orange, icon: (g, s) => Icons.arrowLeft(g, s), onClick: () => this.showStep(this.stepIdx - 1) });
     this.nextBtn = new Button(this, GAME_W - 70, 360, { r: 56, color: C.green, icon: (g, s) => Icons.arrowRight(g, s), onClick: () => this.next() });
@@ -226,7 +244,10 @@ export class FactoryScene extends Phaser.Scene {
     const d = this.design;
     switch (step) {
       case 'body':
-        this.cards(BODY_TYPES, (v) => d.body === v, (v) => this.set({ body: v }), (c, v) => this.miniBus(c, { ...d, body: v }));
+        this.cards(BODY_TYPES, (v) => d.body === v, (v) => this.set({ body: v }), (c, v) => {
+          this.miniBus(c, { ...d, body: v }, -16);
+          c.add(label(this, 0, 52, t(`body_${v}` as TextKey), { size: 21, color: C.ink, strokeThickness: 0 }));
+        });
         break;
       case 'doors':
         this.cards(DOOR_COUNTS, (v) => d.doors === v, (v) => this.set({ doors: v }), (c, v) => this.miniBus(c, { ...d, doors: v }));
@@ -289,10 +310,10 @@ export class FactoryScene extends Phaser.Scene {
     });
   }
 
-  private miniBus(c: Phaser.GameObjects.Container, design: BusDesign): void {
+  private miniBus(c: Phaser.GameObjects.Container, design: BusDesign, dy = 0): void {
     const { L, H } = BODY_SIZE[design.body];
     const s = Math.min(196 / (L + 30), 118 / (H + 60));
-    const bus = new BusView(this, 0, (H + 40) * s * 0.5, design);
+    const bus = new BusView(this, 0, (H + 40) * s * 0.5 + dy, design);
     bus.setScale(s);
     c.add(bus);
   }
@@ -327,12 +348,12 @@ export class FactoryScene extends Phaser.Scene {
     this.bus.setDesign(this.design);
     this.numberText.setText(n);
     this.tweens.add({ targets: this.numberText, scale: { from: 1.3, to: 1 }, duration: 200 });
-    if (n) saveDesign(this.design);
+    if (n) saveDesign(this.design, this.slot);
   }
 
   private set(patch: Partial<BusDesign>): void {
     this.design = { ...this.design, ...patch };
-    saveDesign(this.design);
+    saveDesign(this.design, this.slot);
     this.bus.setDesign(this.design);
     audio.select();
     this.sparkle();
@@ -360,7 +381,7 @@ export class FactoryScene extends Phaser.Scene {
     if (this.finished) return;
     this.finished = true;
     this.design = { ...this.design, number: normalizeNumber(this.design.number) };
-    saveDesign(this.design);
+    saveDesign(this.design, this.slot);
     this.bus.setDesign(this.design);
     this.panel.setVisible(false);
     this.numberDisplay.setVisible(false);

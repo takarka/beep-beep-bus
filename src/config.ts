@@ -42,6 +42,12 @@ export function shade(c: number, f: number): number {
   return (ch((c >> 16) & 255) << 16) | (ch((c >> 8) & 255) << 8) | ch(c & 255);
 }
 
+/** Blend colour a towards b (t = 0 → a, t = 1 → b). */
+export function mix(a: number, b: number, t: number): number {
+  const ch = (sh: number) => Math.round(((a >> sh) & 255) * (1 - t) + ((b >> sh) & 255) * t);
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+}
+
 /** Relative luminance 0..1, used to pick contrasting decor colours. */
 export function luminance(c: number): number {
   return (0.299 * ((c >> 16) & 255) + 0.587 * ((c >> 8) & 255) + 0.114 * (c & 255)) / 255;

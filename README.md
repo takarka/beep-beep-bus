@@ -22,7 +22,7 @@ npm run build      # production build into dist/ (static files, can be hosted an
 |---|---|---|
 | Gas | green pedal (bottom right) | → / ↑ / D / W |
 | Brake | red pedal with a hand (bottom left) | ← / ↓ / A / S / Space |
-| Horn | tap the bus in the menu | H |
+| Horn (beep-beep) | yellow button next to the gas pedal; tap the bus in the menu | H |
 | Pause | ⏸ button | Esc / P |
 
 If the child just lets go of the gas, the bus slows down smoothly by itself, so even a 4-year-old can stop with one pedal.
@@ -37,7 +37,21 @@ If the child just lets go of the gas, the bus slows down smoothly by itself, so 
 | Drove through a red light | **−10** |
 | Drove past a stop where people were waiting | **−5** |
 
-Yellow is not penalized (the child is still learning). The first light on each level always turns red as the bus approaches, to show the rule. Stars at the end: 0 mistakes = ⭐⭐⭐, 1–2 = ⭐⭐, more = ⭐.
+Yellow is not penalized (the child is still learning). A yellow light never turns red while the bus is too close and too fast to stop, so the player is never punished for something they couldn't avoid. Lights and stops are at least 2100 px apart (about 6 seconds of driving) and the bus is slow and gentle, so there is always time to react.
+
+**Helper mode** (steering-wheel button in the menu or in the pause screen): the bus brakes by itself in front of red lights and bus stops, so even a 3–4 year old can play by just holding the gas. The first light on each level always turns red as the bus approaches, to show the rule. Stars at the end: 0 mistakes = ⭐⭐⭐, 1–2 = ⭐⭐, more = ⭐.
+
+## Bus types
+
+City, **articulated "accordion" bus**, double-decker and school bus (with a hood). Saves from the old "long" bus are converted to the articulated one automatically. The bus can be edited at any time through the garage (menu, pause and results screens); the green ▶ in the factory starts the route from any step.
+
+## Garage: up to 3 saved buses
+
+«Гараж» / "Garage" (menu, pause and results screens) keeps **up to three buses at once**. Tap a card to make that bus the driver, ▶ drives with it, ✏️ edits it, ✕ deletes it (tap twice, so a small finger can't delete by accident), **+** builds a new one in an empty place. A bus saved before the garage existed moves into place 1 automatically.
+
+## Install as an app / fullscreen
+
+The game is a PWA: on a phone or tablet open the site, then *Add to Home Screen* (iPhone: Share → Add to Home Screen) to get a fullscreen app that also works offline after the first visit. The orange button in the menu toggles fullscreen in the browser (not available in iPhone Safari).
 
 ## Publishing
 

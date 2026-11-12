@@ -7,7 +7,9 @@ import { getSettings, onSettingsChange } from './core/settings';
 import { BootScene } from './scenes/BootScene';
 import { DriveScene } from './scenes/DriveScene';
 import { FactoryScene } from './scenes/FactoryScene';
+import { GarageScene } from './scenes/GarageScene';
 import { MenuScene } from './scenes/MenuScene';
+import { WorldScene } from './scenes/WorldScene';
 import { ResultScene } from './scenes/ResultScene';
 
 async function start(): Promise<void> {
@@ -40,8 +42,15 @@ async function start(): Promise<void> {
     audio: { noAudio: true },
     render: { antialias: true, roundPixels: false },
     input: { activePointers: 3 },
-    scene: [BootScene, MenuScene, FactoryScene, DriveScene, ResultScene],
+    scene: [BootScene, MenuScene, GarageScene, WorldScene, FactoryScene, DriveScene, ResultScene],
   });
+
+  // Offline support + "install to home screen" (production builds only)
+  if ('serviceWorker' in navigator && import.meta.env.PROD) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(() => undefined);
+    });
+  }
 
   // Expose for debugging and automated smoke tests.
   (window as unknown as { __game: Phaser.Game }).__game = game;

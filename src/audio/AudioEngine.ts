@@ -39,6 +39,7 @@ class AudioEngine {
   private nextNoteTime = 0;
   private step = 0;
 
+  private rain: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
   private engine: { osc: OscillatorNode; osc2: OscillatorNode; gain: GainNode } | null = null;
 
   configure(sound: boolean, music: boolean): void {
@@ -138,9 +139,9 @@ class AudioEngine {
 
   horn(): void {
     if (!this.live()) return;
-    for (const at of [0, 0.26]) {
-      this.tone({ freq: 349, dur: 0.2, type: 'square', vol: 0.07, at });
-      this.tone({ freq: 440, dur: 0.2, type: 'square', vol: 0.07, at });
+    for (const at of [0, 0.2]) {
+      this.tone({ freq: 440, dur: 0.14, type: 'square', vol: 0.07, at, attack: 0.004 });
+      this.tone({ freq: 554, dur: 0.14, type: 'square', vol: 0.07, at, attack: 0.004 });
     }
   }
 
@@ -194,6 +195,38 @@ class AudioEngine {
     notes.forEach((n, i) =>
       this.tone({ freq: midi(n), dur: i === notes.length - 1 ? 0.6 : 0.16, type: 'triangle', vol: 0.25, at: times[i] }),
     );
+  }
+
+  // ---------- rain ----------
+  startRain(): void {
+    const ctx = this.ctx;
+    if (!ctx || this.rain) return;
+    if (!this.noiseBuf) {
+      this.noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+      const data = this.noiseBuf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    }
+    const src = ctx.createBufferSource();
+    src.buffer = this.noiseBuf;
+    src.loop = true;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 1400;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 7000;
+    const gain = ctx.createGain();
+    gain.gain.value = 0.05;
+    src.connect(hp).connect(lp).connect(gain).connect(this.sfxBus);
+    src.start();
+    this.rain = { src, gain };
+  }
+
+  stopRain(): void {
+    if (!this.rain || !this.ctx) return;
+    this.rain.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1);
+    this.rain.src.stop(this.ctx.currentTime + 0.5);
+    this.rain = null;
   }
 
   // ---------- engine hum ----------
