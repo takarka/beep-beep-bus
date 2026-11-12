@@ -47,6 +47,10 @@ Yellow is not penalized (the child is still learning). A yellow light never turn
 
 Levels get harder: 3 stops and 3 lights on levels 1–2, up to 8 and 8 on levels 11–12, more people waiting, and a higher speed limit (340 → 510 px/s). Levels, landmark positions and texts live in `core/campaign.ts`, `core/level.ts` and `i18n`; to add levels extend `LANDMARKS` / `MAP_NODES` and `LEVEL_COUNT`.
 
+## Other road users (oncoming traffic)
+
+Passenger cars (two body shapes), a **police car** with a flashing light bar (never more than one at a time, and a rare guest) and a **small bus** drive towards us in the far lane. They are bots: they never touch our bus (they pass behind it), but they follow the rules. They stop for red at their own stop line (past the zebra crossing), stop on yellow only if they still can, keep their distance and queue up without overlapping, then drive on when the light turns green. At night their headlights glow. The road gets a bit busier on later levels. Behaviour is pure maths in `traffic/ai.ts` (covered by tests), drawing in `traffic/VehicleView.ts`, spawning in `traffic/TrafficManager.ts`.
+
 ## Seasons, day / night, weather
 
 Every level has its own setting: summer, autumn, winter or spring, by day or by night, dry or rainy (snowy in winter). Night has a moon, stars, lit windows and street lamps, and the bus switches on its headlight beams. Autumn drops leaves, spring drops petals, rain also makes noise. The **«Погода» / "Weather"** button in the menu opens a screen to pick the season, day or night and weather yourself; the dice button returns to "auto" (the setting follows the level).
@@ -87,6 +91,7 @@ src/
     campaign.ts         the 12 levels and their places on the map of Astana
     world.ts            seasons, day/night, weather and their colour palettes
     rng.ts, storage.ts
+  traffic/              other road users: ai.ts (rules), VehicleView.ts (drawing), TrafficManager.ts (spawning)
   bus/
     design.ts           bus design model (body, doors, wheels, colour…) + validation
     garage.ts           up to 3 saved buses

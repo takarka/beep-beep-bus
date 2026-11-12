@@ -24,6 +24,10 @@
 - Seasons (summer, autumn, winter, spring), day and night, rain and snow, own setting per level + weather picker
 - Space bar = horn
 
+## ✅ Version 0.4 (part 1, done)
+
+- Oncoming traffic in the far lane: passenger cars, a police car, a small bus; they obey lights and keep their distance
+
 ## 🔜 Version 0.2: mobile and polish (remaining)
 
 - [ ] Phone testing: button sizes, safe areas (notch), fullscreen on the first tap
@@ -35,7 +39,8 @@
 
 - [ ] **Pedestrian crossing**: a pedestrian walks across, you must let them pass (+points)
 - [ ] **STOP sign**, "children" sign, speed bumps
-- [ ] Other cars on the road (keep your distance)
+- [ ] Traffic in our own lane too (the bus must keep its distance), parked cars, a bus that stops at the stops
+- [ ] More vehicle types (taxi, truck, ambulance that you must let pass)
 - [ ] Evening / sunrise, fog, wipers
 - [ ] More routes / cities after Astana (Almaty, Shymkent, the seaside, mountains)
 - [ ] Landmark story on each level: a short postcard or fact when it is completed

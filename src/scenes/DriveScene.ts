@@ -24,6 +24,7 @@ import { t } from '../i18n';
 import { Icons, drawMiniLight, drawStar, drawStopSign } from '../ui/draw';
 import { GROUND_Y, PASSENGER_VARIANTS, SIDEWALK_FEET_Y, STREET_Y } from '../ui/textures';
 import { createScenery } from '../ui/scenery';
+import { TrafficManager } from '../traffic/TrafficManager';
 import { precipKind, resolveEnv } from '../core/world';
 import { Button, HoldButton, floatText, label } from '../ui/widgets';
 import { addAudioToggles } from './MenuScene';
@@ -76,6 +77,7 @@ export class DriveScene extends Phaser.Scene {
   private paused = false;
   private gasTouched = false;
   private assist = false;
+  private traffic!: TrafficManager;
   private lastHorn = -1000;
   /** Screen x of the bus centre; leaves more road visible ahead of the bus. */
   private camLead = 360;
@@ -124,6 +126,8 @@ export class DriveScene extends Phaser.Scene {
     this.bus.setScale(DRIVE_SCALE[design.body]).setDepth(10);
     this.camLead = 140 + this.bus.lengthWorld() / 2;
     this.bus.setNight(env.time === 'night');
+    this.traffic = new TrafficManager(this, { night: env.time === 'night', level: this.level.level });
+    this.traffic.prewarm(Phaser.Math.Clamp(START_X - this.camLead, 0, this.level.length - GAME_W));
     this.bus.setPassengers(0);
 
     const stopsTotal = this.level.items.filter((i) => i.kind === 'stop').length;
@@ -649,6 +653,7 @@ export class DriveScene extends Phaser.Scene {
     const cam = this.cameras.main;
     cam.scrollX = Phaser.Math.Clamp(this.bus.x - this.camLead, 0, this.level.length - GAME_W);
     this.backdrop.update(cam.scrollX, dt);
+    this.traffic.update(dt, cam.scrollX, this.signals.map((l) => ({ lineX: l.data.lineX, state: l.model.state })));
 
     this.progressBus.x = Phaser.Math.Clamp(this.toBar(this.bus.x), 370, 900);
 
