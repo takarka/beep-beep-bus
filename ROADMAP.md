@@ -23,6 +23,7 @@
 - **Map of Astana** with 12 levels (landmarks), check marks and stars, unlocking, total points
 - Seasons (summer, autumn, winter, spring), day and night, rain and snow, own setting per level + weather picker
 - Space bar = horn
+- Each level finishes at its own landmark from the map; big "Continue" button on the map
 
 ## ✅ Version 0.4 (part 1, done)
 

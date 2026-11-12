@@ -20,10 +20,13 @@ import {
   isWaitingBeforeLine,
 } from '../core/rules';
 import { TrafficLightModel, type LightState } from '../core/traffic';
-import { t } from '../i18n';
+import { t, type TextKey } from '../i18n';
 import { Icons, drawMiniLight, drawStar, drawStopSign } from '../ui/draw';
 import { GROUND_Y, PASSENGER_VARIANTS, SIDEWALK_FEET_Y, STREET_Y } from '../ui/textures';
 import { createScenery } from '../ui/scenery';
+import { landmarkForLevel } from '../core/campaign';
+import { drawLandmark } from '../ui/landmarks';
+import { drawLandmarkBig } from '../ui/landmarkScenes';
 import { TrafficManager } from '../traffic/TrafficManager';
 import { precipKind, resolveEnv } from '../core/world';
 import { Button, HoldButton, floatText, label } from '../ui/widgets';
@@ -136,7 +139,7 @@ export class DriveScene extends Phaser.Scene {
       if (item.kind === 'light') this.createLight(item);
       else this.createStop(item, ++stopIdx === stopsTotal);
     }
-    this.createFinish();
+    this.createFinish(env.time === 'night');
     this.createHud();
     this.createControls();
 
@@ -290,20 +293,24 @@ export class DriveScene extends Phaser.Scene {
     this.stops.push({ data, state: 'waiting', people, arrow, announced: false, last });
   }
 
-  private createFinish(): void {
+  /** The finish is the landmark of this level (Baiterek, Astana Arena, ...), standing behind the road. */
+  private createFinish(night: boolean): void {
     const x = this.level.finishX;
-    const g = this.add.graphics().setDepth(-3);
-    // depot building on the far side
-    g.fillStyle(0xd4a5a5, 1);
-    g.lineStyle(5, C.ink, 1);
-    g.fillRect(x - 40, 210, 520, STREET_Y + 44 - 210);
-    g.strokeRect(x - 40, 210, 520, STREET_Y + 44 - 210);
-    g.fillStyle(C.red, 1);
-    g.fillRect(x - 60, 190, 560, 36);
-    g.strokeRect(x - 60, 190, 560, 36);
-    g.fillStyle(0x3b3640, 1);
-    g.fillRoundedRect(x + 20, 270, 200, STREET_Y + 44 - 270, { tl: 90, tr: 90, bl: 0, br: 0 });
-    g.fillRoundedRect(x + 250, 270, 200, STREET_Y + 44 - 270, { tl: 90, tr: 90, bl: 0, br: 0 });
+    const id = landmarkForLevel(this.level.level);
+    const cx = x + 260;
+    const farSidewalkBack = STREET_Y + 44;
+    const g = this.add.graphics({ x: cx, y: farSidewalkBack }).setDepth(-3);
+    drawLandmarkBig(g, id, night);
+    // name board in front of it
+    const board = this.add.container(cx, farSidewalkBack - 14).setDepth(-2);
+    const name = label(this, 0, 0, t(`lm_${id}` as TextKey), { size: 24, color: C.ink, strokeThickness: 0 });
+    const bw = name.width + 40;
+    const bg = this.add.graphics();
+    bg.fillStyle(C.cream, 1);
+    bg.fillRoundedRect(-bw / 2, -22, bw, 44, 14);
+    bg.lineStyle(4, C.ink, 1);
+    bg.strokeRoundedRect(-bw / 2, -22, bw, 44, 14);
+    board.add([bg, name]);
     // checkered finish line on the road
     const road = this.add.graphics().setDepth(-4);
     const cell = 16;
@@ -755,6 +762,11 @@ export class DriveScene extends Phaser.Scene {
     this.gas.reset();
     this.brake.reset();
     audio.horn();
+    const arrived = landmarkForLevel(this.level.level);
+    this.showBanner(t(`lm_${arrived}` as TextKey), C.blue, 2400, (g) => {
+      drawLandmark(g, arrived);
+      g.setScale(0.7);
+    });
     this.time.delayedCall(1300, () => {
       this.phase = 'ended';
       audio.stopEngine();

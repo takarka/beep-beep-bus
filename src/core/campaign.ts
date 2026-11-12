@@ -24,6 +24,10 @@ export interface MapNode {
   y: number;
 }
 
+/** The landmark of a level; if there are ever more levels than landmarks, they start over. */
+export const landmarkForLevel = (level: number): LandmarkId =>
+  MAP_NODES[(((Math.floor(level) - 1) % MAP_NODES.length) + MAP_NODES.length) % MAP_NODES.length]!.landmark;
+
 /** The path snakes from the railway station (bottom left) to the airport (top right). */
 export const MAP_NODES: readonly MapNode[] = [
   { landmark: 'station', x: 130, y: 590 },

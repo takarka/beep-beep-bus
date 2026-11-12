@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LANDMARKS, LEVEL_COUNT, MAP_NODES } from '../src/core/campaign';
+import { LANDMARKS, LEVEL_COUNT, MAP_NODES, landmarkForLevel } from '../src/core/campaign';
 import { DICTS } from '../src/i18n';
 import { generateLevel, levelCounts, maxSpeedFor } from '../src/core/level';
 import {
@@ -28,6 +28,12 @@ describe('campaign map', () => {
     for (let i = 0; i < MAP_NODES.length; i++)
       for (let j = i + 1; j < MAP_NODES.length; j++)
         expect(Math.hypot(MAP_NODES[i]!.x - MAP_NODES[j]!.x, MAP_NODES[i]!.y - MAP_NODES[j]!.y)).toBeGreaterThan(170);
+  });
+
+  it('every level finishes at its own landmark', () => {
+    for (let l = 1; l <= LEVEL_COUNT; l++) expect(landmarkForLevel(l)).toBe(MAP_NODES[l - 1]!.landmark);
+    expect(landmarkForLevel(LEVEL_COUNT + 1)).toBe(landmarkForLevel(1)); // past the last one: start over
+    expect(landmarkForLevel(0)).toBe(landmarkForLevel(LEVEL_COUNT)); // never crashes on odd input
   });
 
   it('names every landmark in every language', () => {

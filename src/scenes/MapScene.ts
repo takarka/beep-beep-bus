@@ -193,7 +193,7 @@ function drawMapBackground(scene: Phaser.Scene): void {
   g.lineStyle(12, C.ink, 1);
   g.strokeRoundedRect(6, 6, GAME_W - 12, GAME_H - 12, 18);
   const cx = GAME_W - 70;
-  const cy = GAME_H - 70;
+  const cy = 150;
   g.fillStyle(C.cream, 1);
   g.fillCircle(cx, cy, 34);
   g.lineStyle(4, C.ink, 1);
@@ -221,6 +221,23 @@ function segment(i: number): Phaser.Curves.QuadraticBezier {
   );
 }
 
+const segPoints = (i: number): Phaser.Math.Vector2[] => segment(i).getPoints(60);
+
+/** Where the bus waits in front of a landmark: on the road just outside its badge. */
+function restPoint(index: number): { x: number; y: number; seg: number; at: number } {
+  const node = MAP_NODES[index]!;
+  if (index > 0) {
+    const pts = segPoints(index - 1);
+    for (let i = pts.length - 1; i >= 0; i--) {
+      if (Math.hypot(pts[i]!.x - node.x, pts[i]!.y - node.y) >= R + 64) return { x: pts[i]!.x, y: pts[i]!.y, seg: index - 1, at: i };
+    }
+  }
+  // the first landmark has no road before it: park above the badge
+  return { x: node.x, y: node.y - R - 12, seg: -1, at: 0 };
+}
+
+const BUS_ON_ROAD = 8;
+
 function drawRoad(g: G, curve: Phaser.Curves.QuadraticBezier, built: boolean): void {
   const pts = curve.getPoints(40);
   if (built) {
@@ -245,6 +262,7 @@ export class MapScene extends Phaser.Scene {
   private busy = false;
   private scoreText!: Phaser.GameObjects.Text;
   private countText!: Phaser.GameObjects.Text;
+  private playBtn!: Button;
 
   constructor() {
     super('Map');
@@ -264,9 +282,10 @@ export class MapScene extends Phaser.Scene {
     this.createNodes(progress, cel);
     this.createHud(progress, cel);
     this.createBus(progress, cel);
+    this.createPlayButton(progress, cel);
 
     const kb = this.input.keyboard;
-    kb?.on('keydown-ENTER', () => this.play(this.nodes.find((n) => n.state === 'current')?.level ?? 1));
+    kb?.on('keydown-ENTER', () => this.playNext(progress));
 
     if (cel) this.celebrate(progress, cel);
   }
@@ -324,11 +343,42 @@ export class MapScene extends Phaser.Scene {
   private createBus(p: Progress, cel: number): void {
     const design = loadDesign() ?? { ...DEFAULT_DESIGN };
     this.busScale = BUS_LEN / BODY_SIZE[design.body].L;
-    const at = MAP_NODES[(cel || p.level) - 1]!;
-    this.bus = new BusView(this, at.x, at.y - R - 4, design);
+    const at = restPoint((cel || p.level) - 1);
+    this.bus = new BusView(this, at.x, at.y + BUS_ON_ROAD, design);
     this.bus.setScale(this.busScale).setDepth(30);
     this.bus.setPassengers(2);
     this.tweens.add({ targets: this.bus, y: this.bus.y - 5, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
+  }
+
+  /** A big "continue" button: the child doesn't have to aim at the right landmark. */
+  private createPlayButton(p: Progress, cel: number): void {
+    const btn = new Button(this, GAME_W - 148, 636, { w: 270, h: 88, color: C.green, onClick: () => this.playNext(p) });
+    const icon = this.add.graphics({ x: -96, y: 0 });
+    Icons.play(icon, 48);
+    const text = label(this, 26, 0, completedCount(p) === 0 ? t('play') : t('continue'), { size: 28 });
+    if (text.width > 170) text.setScale(170 / text.width); // long words (Kazakh) still fit
+    btn.add([icon, text]);
+    btn.setDepth(45);
+    this.playBtn = btn;
+    if (cel) {
+      btn.setVisible(false);
+    } else {
+      this.tweens.add({ targets: btn, scale: 1.06, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' });
+    }
+  }
+
+  /** Shows the button once the celebration is over. */
+  private revealPlay(): void {
+    this.playBtn.setVisible(true).setScale(0);
+    this.tweens.add({ targets: this.playBtn, scale: 1, duration: 400, ease: 'Back.easeOut' });
+    this.time.delayedCall(450, () =>
+      this.tweens.add({ targets: this.playBtn, scale: 1.06, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' }),
+    );
+  }
+
+  /** The level that comes next: the highlighted one, or the last level once everything is done. */
+  private playNext(p: Progress): void {
+    this.play(this.nodes.find((n) => n.state === 'current')?.level ?? p.level);
   }
 
   private onTap(nv: NodeView): void {
@@ -371,6 +421,13 @@ export class MapScene extends Phaser.Scene {
     }
     this.time.delayedCall(1700, () => {
       const curve = segment(cel - 1);
+      // the way: from the waiting spot before this landmark, over it, to the waiting spot before the next one
+      const from = restPoint(cel - 1);
+      const to = restPoint(cel);
+      const path: Phaser.Math.Vector2[] = [];
+      if (from.seg >= 0) path.push(...segPoints(from.seg).slice(from.at));
+      else path.push(new Phaser.Math.Vector2(from.x, from.y));
+      path.push(...segPoints(cel - 1).slice(0, to.at + 1));
       const road = this.add.graphics().setDepth(-3).setAlpha(0);
       drawRoad(road, curve, true);
       this.tweens.add({ targets: road, alpha: 1, duration: 1500 });
@@ -384,8 +441,12 @@ export class MapScene extends Phaser.Scene {
         duration: 1700,
         ease: 'Sine.easeInOut',
         onUpdate: () => {
-          const pt = curve.getPoint(prog.t);
-          this.bus.setPosition(pt.x, pt.y - R - 4);
+          const f = prog.t * (path.length - 1);
+          const i = Math.min(Math.floor(f), path.length - 2);
+          const a = path[i]!;
+          const b = path[i + 1]!;
+          const k = f - i;
+          this.bus.setPosition(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k + BUS_ON_ROAD);
         },
         onComplete: () => {
           this.moving = false;
@@ -395,6 +456,7 @@ export class MapScene extends Phaser.Scene {
           audio.select();
           this.tweens.add({ targets: this.bus, y: this.bus.y - 5, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
           this.busy = false;
+          this.revealPlay();
         },
       });
     });
@@ -416,6 +478,7 @@ export class MapScene extends Phaser.Scene {
     this.tweens.add({ targets: c, scale: 1, duration: 500, ease: 'Back.easeOut' });
     this.tweens.add({ targets: c, alpha: 0, delay: 4500, duration: 600, onComplete: () => c.destroy() });
     this.busy = false;
+    this.revealPlay();
   }
 
   update(_: number, delta: number): void {

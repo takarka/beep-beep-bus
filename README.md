@@ -43,7 +43,9 @@ Yellow is not penalized (the child is still learning). A yellow light never turn
 
 ## Campaign: the map of Astana
 
-**Play** opens a map of Astana with **12 levels**, one per landmark: station, concert hall, Triumph of Astana, Khan Shatyr, Palace of Peace, Baiterek, Ak Orda, Hazrat Sultan mosque, Kazak Eli, Nur Alem, Astana Arena, airport. Only level 1 is open at first; **finishing a level opens the next**, puts a green ✓ and 1–3 stars on it, builds the road to the next landmark and drives the bus there. The panel at the top shows the total points (best score of every level) and how many levels are done. Finished levels can be replayed to improve stars and score; a locked level just shakes.
+**Play** opens a map of Astana with **12 levels**, one per landmark: station, concert hall, Triumph of Astana, Khan Shatyr, Palace of Peace, Baiterek, Ak Orda, Hazrat Sultan mosque, Kazak Eli, Nur Alem, Astana Arena, airport. Only level 1 is open at first; **finishing a level opens the next**, puts a green ✓ and 1–3 stars on it, builds the road to the next landmark and drives the bus there. The panel at the top shows the total points (best score of every level) and how many levels are done. A big green **«Продолжить» / "Continue" button** in the corner starts the next level, so a small child doesn't have to aim at the right landmark (tapping a landmark works too; finished levels can be replayed to improve stars and score, a locked level just shakes). The bus waits on the road in front of the next landmark.
+
+**Every level ends at its own landmark.** The finish of the route is the building from the map (station, Baiterek, Khan Shatyr, Astana Arena, ...) drawn big behind the road with a name board, dimmed with lit windows at night, and the bus announces the arrival. Drawings: `ui/landmarkScenes.ts` (big) and `ui/landmarks.ts` (map badges).
 
 Levels get harder: 3 stops and 3 lights on levels 1–2, up to 8 and 8 on levels 11–12, more people waiting, and a higher speed limit (340 → 510 px/s). Levels, landmark positions and texts live in `core/campaign.ts`, `core/level.ts` and `i18n`; to add levels extend `LANDMARKS` / `MAP_NODES` and `LEVEL_COUNT`.
 
