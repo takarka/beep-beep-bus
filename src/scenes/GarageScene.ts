@@ -7,7 +7,7 @@ import { C, GAME_W } from '../config';
 import { loadProgress } from '../core/progress';
 import { t } from '../i18n';
 import { Icons } from '../ui/draw';
-import { Backdrop } from '../ui/textures';
+import { createScenery, currentEnv } from '../ui/scenery';
 import { Button, label } from '../ui/widgets';
 import { addAudioToggles } from './MenuScene';
 
@@ -18,7 +18,7 @@ const CARD_GAP = 380;
 
 /** Up to three saved buses: pick one to drive, edit it, delete it, or build a new one. */
 export class GarageScene extends Phaser.Scene {
-  private backdrop!: Backdrop;
+  private backdrop!: ReturnType<typeof createScenery>;
   private scrollX = 0;
   private confirmSlot: number | null = null;
 
@@ -30,7 +30,7 @@ export class GarageScene extends Phaser.Scene {
     this.cameras.main.fadeIn(200, 45, 42, 50);
     this.scrollX = 0;
     this.confirmSlot = null;
-    this.backdrop = new Backdrop(this);
+    this.backdrop = createScenery(this, currentEnv(), { behindUi: true });
     const garage = loadGarage();
 
     label(this, GAME_W / 2, 78, t('garage'), { size: 64, color: C.yellow, strokeThickness: 10 });

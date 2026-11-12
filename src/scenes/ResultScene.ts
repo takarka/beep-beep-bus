@@ -9,12 +9,15 @@ import { recordResult } from '../core/progress';
 import { starsFor } from '../core/rules';
 import { t } from '../i18n';
 import { Icons, drawStar } from '../ui/draw';
-import { Backdrop, GROUND_Y } from '../ui/textures';
+import { GROUND_Y } from '../ui/textures';
+import { createScenery } from '../ui/scenery';
+import { getSettings } from '../core/settings';
+import { resolveEnv } from '../core/world';
 import { Button, confetti, label } from '../ui/widgets';
 import type { DriveResult } from './DriveScene';
 
 export class ResultScene extends Phaser.Scene {
-  private backdrop!: Backdrop;
+  private backdrop!: ReturnType<typeof createScenery>;
   private bus!: BusView;
   private scroll = 0;
 
@@ -25,13 +28,15 @@ export class ResultScene extends Phaser.Scene {
   create(r: DriveResult): void {
     this.cameras.main.fadeIn(300, 45, 42, 50);
     this.scroll = 0;
-    this.backdrop = new Backdrop(this);
+    const env = resolveEnv(r.level, getSettings().world);
+    this.backdrop = createScenery(this, env, { behindUi: true });
     const stars = starsFor(r.mistakes);
     recordResult(r.level, stars);
 
     const design = loadDesign() ?? { ...DEFAULT_DESIGN };
     this.bus = new BusView(this, 200, GROUND_Y, design);
     this.bus.setScale(DRIVE_SCALE[design.body] * 0.7);
+    this.bus.setNight(env.time === 'night');
 
     const cx = GAME_W / 2;
     const panel = this.add.graphics();

@@ -9,7 +9,8 @@ import { loadProgress } from '../core/progress';
 import { getSettings, updateSettings } from '../core/settings';
 import { DICTS, LANGS, t } from '../i18n';
 import { Icons } from '../ui/draw';
-import { Backdrop, GROUND_Y } from '../ui/textures';
+import { GROUND_Y } from '../ui/textures';
+import { createScenery, currentEnv } from '../ui/scenery';
 import { Button, label } from '../ui/widgets';
 
 /** Sound + music toggles, reused by every scene. */
@@ -40,7 +41,7 @@ export function addAudioToggles(scene: Phaser.Scene, x: number, y: number): void
 const ASSIST_OFF = 0xb9b0a0;
 
 export class MenuScene extends Phaser.Scene {
-  private backdrop!: Backdrop;
+  private backdrop!: ReturnType<typeof createScenery>;
   private scrollX = 0;
   private bus!: BusView;
 
@@ -51,7 +52,8 @@ export class MenuScene extends Phaser.Scene {
   create(): void {
     audio.startMusic();
     this.scrollX = 0;
-    this.backdrop = new Backdrop(this);
+    const env = currentEnv();
+    this.backdrop = createScenery(this, env, { behindUi: true });
 
     const title = label(this, GAME_W / 2, 118, t('title'), { size: 92, color: C.yellow, strokeThickness: 14 });
     this.tweens.add({ targets: title, angle: { from: -2, to: 2 }, yoyo: true, repeat: -1, duration: 1400, ease: 'Sine.easeInOut' });
@@ -60,6 +62,7 @@ export class MenuScene extends Phaser.Scene {
     const design = saved ?? { ...DEFAULT_DESIGN };
     this.bus = new BusView(this, GAME_W / 2, GROUND_Y, design);
     this.bus.setScale(DRIVE_SCALE[design.body]);
+    this.bus.setNight(env.time === 'night');
     this.bus.setPassengers(3);
     // Tap the bus to honk: small kids love it.
     this.bus.setInteractive(new Phaser.Geom.Rectangle(-420, -400, 840, 400), Phaser.Geom.Rectangle.Contains);
@@ -120,6 +123,15 @@ export class MenuScene extends Phaser.Scene {
         },
       });
     }
+
+    // Weather / season / day-night
+    new Button(this, GAME_W - 70, 650, {
+      r: 36,
+      color: C.blue,
+      icon: (g, s) => Icons.weather(g, s),
+      onClick: () => this.go('World'),
+    });
+    label(this, GAME_W - 118, 650, t('world'), { size: 28, color: C.ink, stroke: C.cream, strokeThickness: 5 }).setOrigin(1, 0.5);
 
     // "Helper" mode for the youngest players: the bus brakes by itself.
     const helper: Button = new Button(this, 70, 650, {

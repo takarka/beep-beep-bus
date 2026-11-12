@@ -100,6 +100,81 @@ export const Icons = {
     const ay = Math.sin(-2.6) * s * 0.27;
     g.fillTriangle(ax - s * 0.17, ay - s * 0.02, ax + s * 0.13, ay - s * 0.14, ax + s * 0.05, ay + s * 0.18);
   },
+  sun(g: G, s: number, color: number = C.yellow) {
+    g.fillStyle(color, 1);
+    g.fillCircle(0, 0, s * 0.19);
+    g.lineStyle(s * 0.07, color, 1);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      g.lineBetween(Math.cos(a) * s * 0.28, Math.sin(a) * s * 0.28, Math.cos(a) * s * 0.4, Math.sin(a) * s * 0.4);
+    }
+  },
+  /** Crescent moon; `bg` is the colour of the button behind it. */
+  moon(g: G, s: number, bg: number, color: number = 0xfff3d6) {
+    g.fillStyle(color, 1);
+    g.fillCircle(0, 0, s * 0.3);
+    g.fillStyle(bg, 1);
+    g.fillCircle(s * 0.15, -s * 0.1, s * 0.27);
+  },
+  leaf(g: G, s: number, color: number = 0xffffff) {
+    const pts: Phaser.Math.Vector2[] = [];
+    const rot = -0.7;
+    const put = (x: number, y: number) =>
+      pts.push(new Phaser.Math.Vector2(x * Math.cos(rot) - y * Math.sin(rot), x * Math.sin(rot) + y * Math.cos(rot)));
+    for (let i = 0; i <= 10; i++) put(-s * 0.36 + (i / 10) * s * 0.72, -Math.sin((i / 10) * Math.PI) * s * 0.22);
+    for (let i = 10; i >= 0; i--) put(-s * 0.36 + (i / 10) * s * 0.72, Math.sin((i / 10) * Math.PI) * s * 0.22);
+    g.fillStyle(color, 1);
+    g.fillPoints(pts, true);
+    g.lineStyle(s * 0.04, C.ink, 0.6);
+    g.lineBetween(-s * 0.3 * Math.cos(rot), -s * 0.3 * Math.sin(rot), s * 0.36 * Math.cos(rot), s * 0.36 * Math.sin(rot));
+  },
+  snowflake(g: G, s: number, color: number = 0xffffff) {
+    g.lineStyle(s * 0.07, color, 1);
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI;
+      g.lineBetween(-Math.cos(a) * s * 0.36, -Math.sin(a) * s * 0.36, Math.cos(a) * s * 0.36, Math.sin(a) * s * 0.36);
+    }
+    g.fillStyle(color, 1);
+    g.fillCircle(0, 0, s * 0.08);
+  },
+  flower(g: G, s: number) {
+    g.fillStyle(0xffffff, 1);
+    for (let i = 0; i < 5; i++) {
+      const a = -Math.PI / 2 + (i / 5) * Math.PI * 2;
+      g.fillCircle(Math.cos(a) * s * 0.18, Math.sin(a) * s * 0.18, s * 0.13);
+    }
+    g.fillStyle(C.yellow, 1);
+    g.fillCircle(0, 0, s * 0.1);
+  },
+  /** Cloud with rain drops or snow dots under it. */
+  cloudPrecip(g: G, s: number, snow: boolean, color: number = 0xffffff) {
+    g.fillStyle(color, 1);
+    g.fillCircle(-s * 0.15, -s * 0.12, s * 0.14);
+    g.fillCircle(s * 0.04, -s * 0.2, s * 0.18);
+    g.fillCircle(s * 0.2, -s * 0.1, s * 0.13);
+    g.fillRoundedRect(-s * 0.3, -s * 0.14, s * 0.6, s * 0.16, s * 0.08);
+    if (snow) {
+      for (const x of [-0.18, 0, 0.18]) g.fillCircle(x * s, s * 0.22 + (x === 0 ? s * 0.06 : 0), s * 0.05);
+    } else {
+      g.lineStyle(s * 0.06, 0x9ad0ff, 1);
+      for (const x of [-0.18, 0, 0.18]) g.lineBetween(x * s + s * 0.04, s * 0.14, x * s - s * 0.04, s * 0.32);
+    }
+  },
+  /** Sun peeking out from behind a cloud: the "weather" menu button. */
+  weather(g: G, s: number) {
+    g.fillStyle(C.yellow, 1);
+    g.fillCircle(-s * 0.12, -s * 0.12, s * 0.2);
+    g.lineStyle(s * 0.06, C.yellow, 1);
+    for (let i = 0; i < 6; i++) {
+      const a = Math.PI + (i / 5) * (Math.PI * 1.2) - 0.1;
+      g.lineBetween(-s * 0.12 + Math.cos(a) * s * 0.27, -s * 0.12 + Math.sin(a) * s * 0.27, -s * 0.12 + Math.cos(a) * s * 0.37, -s * 0.12 + Math.sin(a) * s * 0.37);
+    }
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(-s * 0.02, s * 0.12, s * 0.13);
+    g.fillCircle(s * 0.14, s * 0.04, s * 0.17);
+    g.fillCircle(s * 0.28, s * 0.14, s * 0.11);
+    g.fillRoundedRect(-s * 0.15, s * 0.1, s * 0.5, s * 0.15, s * 0.07);
+  },
   plus(g: G, s: number, color: number = C.cream) {
     g.fillStyle(color, 1);
     g.fillRoundedRect(-s * 0.3, -s * 0.07, s * 0.6, s * 0.14, s * 0.05);

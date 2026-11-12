@@ -22,7 +22,9 @@ import {
 import { TrafficLightModel, type LightState } from '../core/traffic';
 import { t } from '../i18n';
 import { Icons, drawMiniLight, drawStar, drawStopSign } from '../ui/draw';
-import { Backdrop, GROUND_Y, PASSENGER_VARIANTS, SIDEWALK_FEET_Y, STREET_Y } from '../ui/textures';
+import { GROUND_Y, PASSENGER_VARIANTS, SIDEWALK_FEET_Y, STREET_Y } from '../ui/textures';
+import { createScenery } from '../ui/scenery';
+import { precipKind, resolveEnv } from '../core/world';
 import { Button, HoldButton, floatText, label } from '../ui/widgets';
 import { addAudioToggles } from './MenuScene';
 
@@ -62,7 +64,7 @@ export interface DriveResult {
 
 export class DriveScene extends Phaser.Scene {
   private level!: LevelData;
-  private backdrop!: Backdrop;
+  private backdrop!: ReturnType<typeof createScenery>;
   private bus!: BusView;
   private score!: ScoreKeeper;
   private stops: StopRt[] = [];
@@ -114,12 +116,14 @@ export class DriveScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.fadeIn(300, 45, 42, 50);
     this.cameras.main.setBounds(0, 0, this.level.length, GAME_H);
-    this.backdrop = new Backdrop(this);
+    const env = resolveEnv(this.level.level, getSettings().world);
+    this.backdrop = createScenery(this, env);
 
     const design = loadDesign() ?? { ...DEFAULT_DESIGN };
     this.bus = new BusView(this, START_X, GROUND_Y, design);
     this.bus.setScale(DRIVE_SCALE[design.body]).setDepth(10);
     this.camLead = 140 + this.bus.lengthWorld() / 2;
+    this.bus.setNight(env.time === 'night');
     this.bus.setPassengers(0);
 
     const stopsTotal = this.level.items.filter((i) => i.kind === 'stop').length;
@@ -133,7 +137,12 @@ export class DriveScene extends Phaser.Scene {
     this.createControls();
 
     audio.startEngine();
-    this.events.once('shutdown', () => audio.stopEngine());
+    const rain = env.precip && precipKind(env) === 'rain';
+    if (rain) audio.startRain();
+    this.events.once('shutdown', () => {
+      audio.stopEngine();
+      audio.stopRain();
+    });
 
     this.showStartHint();
   }
