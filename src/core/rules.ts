@@ -12,6 +12,10 @@ export const POINTS = {
   speedBump: -5,
   /** Drove over a speed bump slowly and carefully. */
   gentleBump: 3,
+  /** Filled up when the tank was getting empty: planning ahead. */
+  refuel: 4,
+  /** The tank ran dry and somebody had to bring petrol. */
+  noFuel: -10,
 } as const;
 
 /** This many mistakes in a row (with nothing good in between) bring the police siren. */
@@ -69,6 +73,13 @@ export class ScoreKeeper {
       this.streak = 0; // any good deed clears the streak
     }
     return this.score - before;
+  }
+
+  /** Pays for something (a repair). Not a mistake: it doesn't count against the stars or the streak. */
+  spend(points: number): number {
+    const paid = Math.min(this.score, Math.max(0, Math.round(points)));
+    this.score -= paid;
+    return paid;
   }
 
   /** True once when the streak reaches the limit (and the streak starts over). */
@@ -156,4 +167,32 @@ export function conditionOf(health: number): Condition {
 export function finalStars(mistakes: number, health: number): 1 | 2 | 3 {
   const base = starsFor(mistakes);
   return health < 40 && base > 1 ? ((base - 1) as 1 | 2) : base;
+}
+
+// ------------------------------------------------------------------ petrol and the gas station
+
+export const MAX_FUEL = 100;
+/** The "low fuel" warning comes at this level. */
+export const LOW_FUEL = 25;
+
+/**
+ * Petrol used by a move of `dx` px taking `dt` seconds: more per px the faster we go,
+ * a bit extra while pushing the gas, and a little just for idling (waiting at a light).
+ */
+export function fuelUse(dx: number, dt: number, v: number, accelerating: boolean): number {
+  return Math.max(0, dx) * (0.0028 + 0.0000028 * Math.max(0, v)) + dt * (0.2 + (accelerating ? 0.5 : 0));
+}
+
+/** With an empty tank the bus only crawls. */
+export const fuelPerformance = (fuel: number): number => (fuel > 0 ? 1 : 0.25);
+
+/** The station fixes the bus for points: half a point per percent. */
+export const REPAIR_COST_PER_PERCENT = 0.5;
+
+/** How much we can repair for the points we have, and what it costs. */
+export function repairPlan(missingHealth: number, score: number): { percent: number; cost: number } {
+  const missing = Math.max(0, Math.round(missingHealth));
+  const affordable = Math.floor(Math.max(0, score) / REPAIR_COST_PER_PERCENT);
+  const percent = Math.min(missing, affordable);
+  return { percent, cost: Math.ceil(percent * REPAIR_COST_PER_PERCENT) };
 }

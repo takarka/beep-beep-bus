@@ -25,6 +25,8 @@ export type LevelItem = StopData | LightData;
 export interface LevelData {
   level: number;
   items: LevelItem[];
+  /** Where the gas stations are: the world x the bus front should reach (like a stop's `zoneEnd`). */
+  stations: number[];
   /** World x of the speed bumps (from level 2). */
   bumps: number[];
   finishX: number;
@@ -46,6 +48,9 @@ export function levelCounts(level: number): { stops: number; lights: number } {
 
 /** How many speed bumps a level has: none on level 1, then one more every three levels. */
 export const bumpCountFor = (level: number): number => (level < 2 ? 0 : Math.min(1 + Math.floor((Math.max(level, 1) - 1) / 3), 4));
+
+/** Gas stations: none on level 1 (no petrol system yet), one on levels 2–5, two on 6–9, three after that. */
+export const stationCountFor = (level: number): number => (level < 2 ? 0 : level <= 5 ? 1 : level <= 9 ? 2 : 3);
 
 /** Bus speed limit for a level (world px/s): gentle at first, a bit faster later. */
 export const maxSpeedFor = (level: number): number => Math.min(340 + (Math.max(1, level) - 1) * 15, 510);
@@ -83,9 +88,22 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
     x += randInt(rng, MIN_GAP, MAX_GAP);
   }
 
-  // Speed bumps go into the gaps between lights and stops, well away from both.
   const spots = items.map((i) => (i.kind === 'stop' ? i.zoneEnd : i.lineX));
   const gaps = spots.slice(1).map((_, i) => i);
+
+  // Gas stations go into gaps spread evenly along the route, in the middle of the gap.
+  const stations: number[] = [];
+  const nStations = stationCountFor(level);
+  for (let k = 0; k < nStations && gaps.length > 0; k++) {
+    const want = Math.floor(((k + 0.5) / nStations) * (spots.length - 1));
+    let best = 0;
+    for (let i = 1; i < gaps.length; i++) if (Math.abs(gaps[i]! - want) < Math.abs(gaps[best]! - want)) best = i;
+    const g = gaps.splice(best, 1)[0]!;
+    stations.push(Math.round((spots[g]! + spots[g + 1]!) / 2));
+  }
+  stations.sort((a, b) => a - b);
+
+  // Speed bumps go into the other gaps, well away from lights and stops.
   const bumps: number[] = [];
   for (let n = bumpCountFor(level); n > 0 && gaps.length > 0; n--) {
     const g = gaps.splice(randInt(rng, 0, gaps.length - 1), 1)[0]!;
@@ -97,6 +115,7 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
   return {
     level,
     items,
+    stations,
     bumps,
     finishX,
     length: finishX + 1400,

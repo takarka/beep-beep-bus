@@ -28,7 +28,7 @@ import { landmarkForLevel } from '../core/campaign';
 import { drawLandmark } from '../ui/landmarks';
 import { drawLandmarkBig } from '../ui/landmarkScenes';
 import { TrafficManager } from '../traffic/TrafficManager';
-import { BUMP, MAX_HEALTH, bumpDamage, bumpResult, conditionOf, crashDamage, performanceFor } from '../core/rules';
+import { BUMP, LOW_FUEL, MAX_FUEL, MAX_HEALTH, bumpDamage, bumpResult, conditionOf, crashDamage, fuelPerformance, fuelUse, performanceFor, repairPlan } from '../core/rules';
 import { LaneTraffic, type LaneCrash } from '../traffic/LaneTraffic';
 import { Crossing } from '../traffic/Crossing';
 import { precipKind, resolveEnv } from '../core/world';
@@ -61,6 +61,15 @@ interface LightRt {
   /** People crossing on the zebra while the light is red. */
   crossing: Crossing;
   prevState: LightState;
+}
+
+interface StationRt {
+  zoneEnd: number;
+  state: 'waiting' | 'serving' | 'done' | 'skipped';
+  arrow: Phaser.GameObjects.Container;
+  announced: boolean;
+  /** x of the two pumps on the sidewalk. */
+  pumps: number[];
 }
 
 type Phase = 'driving' | 'serving' | 'finishing' | 'ended';
@@ -98,6 +107,17 @@ export class DriveScene extends Phaser.Scene {
   private smoke: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
   private smokeLevel = 0;
   private coughTimer = 4;
+  /** Petrol: 100 = full. Level 1 has no petrol system. */
+  private fuel = MAX_FUEL;
+  private fuelActive = false;
+  private fuelC!: Phaser.GameObjects.Container;
+  private fuelBar!: G;
+  private fuelText!: Phaser.GameObjects.Text;
+  private lowFuelShown = false;
+  private emptyShown = false;
+  private emptyTimer = 0;
+  private stations: StationRt[] = [];
+  private stillTimeSt = 0;
   /** Speed bumps the bus has already driven over. */
   private bumpsDone = new Set<number>();
   /** Seconds the bus is still shaken after hitting somebody (no gas). */
@@ -142,6 +162,13 @@ export class DriveScene extends Phaser.Scene {
     this.smoke = null;
     this.smokeLevel = 0;
     this.coughTimer = 4;
+    this.fuel = MAX_FUEL;
+    this.fuelActive = this.level.level >= 2;
+    this.lowFuelShown = false;
+    this.emptyShown = false;
+    this.emptyTimer = 0;
+    this.stations = [];
+    this.stillTimeSt = 0;
     this.banner = null;
     this.pauseLayer = null;
     this.rng = mulberry32(this.level.level * 31 + 5);
@@ -171,9 +198,11 @@ export class DriveScene extends Phaser.Scene {
       else this.createStop(item, ++stopIdx === stopsTotal);
     }
     this.level.bumps.forEach((bx) => this.createBump(bx));
+    this.level.stations.forEach((sx) => this.createStation(sx));
     this.createFinish(env.time === 'night');
     this.createHud();
     this.createHealthBar();
+    if (this.fuelActive) this.createFuelGauge();
     this.createControls();
 
     audio.startEngine();
@@ -442,6 +471,14 @@ export class DriveScene extends Phaser.Scene {
         drawStopSign(bar, toBar(item.zoneEnd), 53, 12);
       }
     }
+    for (const sx of this.level.stations) {
+      const pg = this.add.graphics({ x: toBar(sx), y: 53 }).setScrollFactor(0).setDepth(91);
+      pg.fillStyle(0x3a86ff, 1);
+      pg.lineStyle(3, C.ink, 1);
+      pg.fillCircle(0, 0, 13);
+      pg.strokeCircle(0, 0, 13);
+      Icons.pump(pg, 17);
+    }
     const fg = this.add.graphics({ x: bx1 + 22, y: 53 }).setScrollFactor(0).setDepth(91);
     Icons.flag(fg, 40);
     this.progressBus = this.add.graphics({ x: bx0, y: 53 }).setScrollFactor(0).setDepth(92);
@@ -671,6 +708,268 @@ export class DriveScene extends Phaser.Scene {
 
   private mistakeBump(bx: number): void {
     this.mistake(t('tooFast'), POINTS.speedBump, bx);
+  }
+
+  // ---------------------------------------------------------------- petrol and the gas station
+
+  /** A blue zone on the road, two pumps and a sign on the sidewalk: stop here like at a bus stop. */
+  private createStation(zoneEnd: number): void {
+    const busLen = this.bus.lengthWorld();
+    const x1 = zoneEnd;
+    const x0 = x1 - busLen + 10;
+    const BLUE = 0x3a86ff;
+
+    const road = this.add.graphics().setDepth(-4);
+    road.fillStyle(BLUE, 0.22);
+    road.fillRect(x0, ROAD_TOP + 66, x1 - x0, ROAD_BOTTOM - ROAD_TOP - 66);
+    road.lineStyle(6, BLUE, 1);
+    road.strokeRect(x0, ROAD_TOP + 66, x1 - x0, ROAD_BOTTOM - ROAD_TOP - 66);
+    road.lineStyle(4, BLUE, 0.7);
+    for (let x = x0 + 20; x < x1 - 10; x += 40) road.lineBetween(x, ROAD_BOTTOM - 4, x + 26, ROAD_TOP + 70);
+
+    // two pumps on the near sidewalk
+    const pumps = [x1 - 215, x1 - 115];
+    const pg = this.add.graphics().setDepth(21);
+    const feet = SIDEWALK_FEET_Y + 6;
+    for (const px of pumps) {
+      pg.fillStyle(0x4a4650, 1);
+      pg.lineStyle(4, C.ink, 1);
+      pg.fillRoundedRect(px - 30, feet - 8, 60, 10, 4);
+      pg.fillStyle(C.red, 1);
+      pg.fillRoundedRect(px - 22, feet - 104, 44, 98, 8);
+      pg.strokeRoundedRect(px - 22, feet - 104, 44, 98, 8);
+      pg.fillStyle(C.cream, 1);
+      pg.fillRoundedRect(px - 16, feet - 96, 32, 26, 4);
+      pg.strokeRoundedRect(px - 16, feet - 96, 32, 26, 4);
+      pg.fillStyle(C.ink, 1);
+      pg.fillRect(px - 11, feet - 90, 22, 8);
+      pg.fillStyle(C.yellow, 1);
+      pg.fillRect(px - 22, feet - 56, 44, 8);
+      pg.lineStyle(5, C.ink, 1);
+      pg.lineBetween(px + 22, feet - 78, px + 34, feet - 60);
+      pg.lineBetween(px + 34, feet - 60, px + 34, feet - 34);
+    }
+
+    // round blue sign with a pump, just ahead of the zone
+    const sign = this.add.graphics().setDepth(20);
+    const sx = x1 + 80;
+    sign.fillStyle(0x4a4650, 1);
+    sign.lineStyle(3, C.ink, 1);
+    sign.fillRect(sx - 5, 540, 10, SIDEWALK_FEET_Y + 4 - 540);
+    sign.strokeRect(sx - 5, 540, 10, SIDEWALK_FEET_Y + 4 - 540);
+    sign.fillStyle(BLUE, 1);
+    sign.lineStyle(4, C.ink, 1);
+    sign.fillCircle(sx, 530, 32);
+    sign.strokeCircle(sx, 530, 32);
+    const icon = this.add.graphics({ x: sx, y: 530 }).setDepth(21);
+    Icons.pump(icon, 42);
+
+    // a warning board far before the station, so the child sees it coming
+    const wx = x1 - 900;
+    const board = this.add.graphics().setDepth(20);
+    board.fillStyle(0x4a4650, 1);
+    board.fillRect(wx - 4, 590, 8, SIDEWALK_FEET_Y + 4 - 590);
+    board.fillStyle(BLUE, 1);
+    board.lineStyle(4, C.ink, 1);
+    board.fillRoundedRect(wx - 34, 520, 68, 68, 12);
+    board.strokeRoundedRect(wx - 34, 520, 68, 68, 12);
+    const bi = this.add.graphics({ x: wx, y: 554 }).setDepth(21);
+    Icons.pump(bi, 46);
+
+    // bouncing blue arrow above the zone
+    const arrow = this.add.container((x0 + x1) / 2, 250).setDepth(30);
+    const ag = this.add.graphics();
+    ag.fillStyle(BLUE, 1);
+    ag.lineStyle(5, C.ink, 1);
+    const pts = [
+      new Phaser.Math.Vector2(-18, -50),
+      new Phaser.Math.Vector2(18, -50),
+      new Phaser.Math.Vector2(18, -10),
+      new Phaser.Math.Vector2(38, -10),
+      new Phaser.Math.Vector2(0, 30),
+      new Phaser.Math.Vector2(-38, -10),
+      new Phaser.Math.Vector2(-18, -10),
+    ];
+    ag.fillPoints(pts, true);
+    ag.strokePoints(pts, true, true);
+    arrow.add(ag);
+    this.tweens.add({ targets: arrow, y: 280, yoyo: true, repeat: -1, duration: 450, ease: 'Sine.easeInOut' });
+
+    this.stations.push({ zoneEnd, state: 'waiting', arrow, announced: false, pumps });
+  }
+
+  private createFuelGauge(): void {
+    const c = this.add.container(302, 90).setScrollFactor(0).setDepth(90);
+    const panel = this.add.graphics();
+    panel.fillStyle(C.cream, 0.95);
+    panel.fillRoundedRect(0, 0, 272, 34, 14);
+    panel.lineStyle(4, C.ink, 1);
+    panel.strokeRoundedRect(0, 0, 272, 34, 14);
+    const icon = this.add.graphics({ x: 26, y: 17 });
+    Icons.pump(icon, 30, C.ink);
+    this.fuelBar = this.add.graphics();
+    this.fuelText = label(this, 172, 18, '100%', { size: 15, color: C.ink, strokeThickness: 0 });
+    c.add([panel, icon, this.fuelBar, this.fuelText]);
+    this.fuelC = c;
+    this.refreshFuelBar();
+  }
+
+  private refreshFuelBar(): void {
+    if (!this.fuelActive) return;
+    const w = 184;
+    const k = this.fuel / MAX_FUEL;
+    const g = this.fuelBar;
+    g.clear();
+    g.fillStyle(0x9a9fa8, 1);
+    g.fillRoundedRect(54, 8, w, 18, 8);
+    g.fillStyle(this.fuel <= LOW_FUEL ? C.red : k >= 0.5 ? 0x3a86ff : C.yellow, 1);
+    if (k > 0) g.fillRoundedRect(54, 8, Math.max(14, w * k), 18, 8);
+    g.lineStyle(3, C.ink, 1);
+    g.strokeRoundedRect(54, 8, w, 18, 8);
+    this.fuelText.setText(`${Math.round(this.fuel)}%`);
+  }
+
+  /** Driving burns petrol: faster and harder pushing on the gas burns more. */
+  private useFuel(dx: number, dt: number, accelerating: boolean): void {
+    if (!this.fuelActive || this.phase === 'finishing') return;
+    const before = Math.round(this.fuel);
+    this.fuel = Math.max(0, this.fuel - fuelUse(dx, dt, this.v, accelerating));
+    if (Math.round(this.fuel) !== before) this.refreshFuelBar();
+
+    if (this.fuel <= LOW_FUEL && this.fuel > 0 && !this.lowFuelShown) {
+      this.lowFuelShown = true;
+      audio.lowFuel();
+      this.showBanner(t('lowFuel'), C.orange, 2400, (g) => Icons.pump(g, 40, C.cream));
+      this.tweens.add({ targets: this.fuelC, scale: { from: 1.3, to: 1 }, duration: 320, ease: 'Back.easeOut' });
+    }
+    if (this.fuel <= 0) {
+      // Dry: the bus crawls; after a few seconds somebody brings petrol (it costs points).
+      if (!this.emptyShown) {
+        this.emptyShown = true;
+        audio.oops();
+        this.showBanner(t('noFuel'), C.red, 2600, (g) => Icons.pump(g, 40, C.cream));
+      }
+      this.emptyTimer += dt;
+      if (this.emptyTimer > 5) {
+        this.emptyTimer = 0;
+        this.emptyShown = false;
+        this.lowFuelShown = false;
+        this.fuel = 25;
+        this.refreshFuelBar();
+        this.mistake(t('noFuel'), POINTS.noFuel, this.bus.x);
+      }
+    } else {
+      this.emptyTimer = 0;
+    }
+  }
+
+  private updateStations(dt: number, front: number, gas: boolean): void {
+    for (const s of this.stations) {
+      if (s.state !== 'waiting') continue;
+      const z = s.zoneEnd;
+      const needed = this.fuelActive && (this.fuel < 75 || this.health < 85);
+      if (!s.announced && z - front < 1000 && front < z) {
+        s.announced = true;
+        if (needed) {
+          audio.dingDong();
+          this.showBanner(t('station'), 0x3a86ff, 1600, (g) => Icons.pump(g, 40, C.cream));
+        }
+      }
+      if (hasMissedStop(front, z)) {
+        s.state = 'skipped'; // driving past is allowed (no penalty); the tank decides if that was wise
+        this.tweens.add({ targets: s.arrow, alpha: 0, duration: 300 });
+        continue;
+      }
+      if (this.phase === 'driving' && isInStopZone(front, z) && this.v < 3 && !gas) {
+        this.stillTimeSt += dt;
+        if (this.stillTimeSt > 0.25) {
+          this.stillTimeSt = 0;
+          void this.serveStation(s);
+        }
+      } else if (isInStopZone(front, z)) {
+        this.stillTimeSt = 0;
+      }
+    }
+  }
+
+  /** Fills the tank for free and fixes the bus for points (half a point per percent). */
+  private async serveStation(st: StationRt): Promise<void> {
+    this.phase = 'serving';
+    st.state = 'serving';
+    this.v = 0;
+    this.tweens.add({ targets: st.arrow, alpha: 0, duration: 300 });
+
+    const fuel0 = this.fuel;
+    const hp0 = this.health;
+    const needFuel = MAX_FUEL - fuel0;
+    const plan = repairPlan(MAX_HEALTH - hp0, this.score.score);
+
+    // the hose from the nearest pump to the fuel flap of the bus
+    const s = this.bus.scaleX;
+    const flapX = this.bus.x + (this.bus.layout.backX + 150) * s;
+    const flapY = GROUND_Y + (this.bus.layout.bottom - 62) * s;
+    const pumpX = st.pumps.reduce((best, p) => (Math.abs(p - flapX) < Math.abs(best - flapX) ? p : best), st.pumps[0]!);
+    const curve = new Phaser.Curves.QuadraticBezier(
+      new Phaser.Math.Vector2(pumpX + 34, 672),
+      new Phaser.Math.Vector2((pumpX + 34 + flapX) / 2, 730),
+      new Phaser.Math.Vector2(flapX, flapY),
+    );
+    const hose = this.add.graphics().setDepth(22);
+    const pts = curve.getPoints(30);
+    hose.lineStyle(10, C.ink, 1);
+    hose.strokePoints(pts, false, false);
+    hose.lineStyle(5, C.yellow, 1);
+    hose.strokePoints(pts, false, false);
+    hose.fillStyle(C.ink, 1);
+    hose.fillCircle(flapX, flapY, 7);
+    hose.setAlpha(0);
+    this.tweens.add({ targets: hose, alpha: 1, duration: 250 });
+
+    audio.fuel();
+    if (plan.percent > 0) {
+      audio.repair();
+      this.sparks(this.bus.frontWorldX() - 60);
+    }
+    const ms = Phaser.Math.Clamp(Math.max(needFuel * 30, plan.percent * 55), 1000, 3800);
+    const prog = { t: 0 };
+    await this.tween({
+      targets: prog,
+      t: 1,
+      duration: ms,
+      ease: 'Sine.easeInOut',
+      onUpdate: () => {
+        this.fuel = fuel0 + needFuel * prog.t;
+        this.refreshFuelBar();
+        if (plan.percent > 0) {
+          this.health = hp0 + plan.percent * prog.t;
+          this.bus.setDamage(1 - this.health / MAX_HEALTH);
+          this.refreshHealthBar();
+        }
+      },
+    });
+    this.fuel = MAX_FUEL;
+    this.refreshFuelBar();
+    if (plan.percent > 0) {
+      this.health = Math.min(MAX_HEALTH, hp0 + plan.percent);
+      this.bus.setDamage(1 - this.health / MAX_HEALTH);
+      this.refreshHealthBar();
+      this.updateSmoke();
+    }
+    this.tweens.add({ targets: hose, alpha: 0, duration: 250, onComplete: () => hose.destroy() });
+
+    // the bill, and a reward for filling up before it was too late
+    if (plan.cost > 0) {
+      this.score.spend(plan.cost);
+      this.refreshHud();
+      floatText(this, this.bus.x, 370, `-${plan.cost}`, C.orange, 40);
+    }
+    if (fuel0 < 60) this.award(POINTS.refuel, this.bus.x);
+    this.lowFuelShown = false;
+    this.emptyShown = false;
+    audio.reward();
+    this.showBanner(t(plan.percent > 0 ? 'repaired' : 'fueled'), C.green, 1800, (g) => Icons.pump(g, 40, C.cream));
+    st.state = 'done';
+    this.phase = 'driving';
   }
 
   // ---------------------------------------------------------------- wear and tear
@@ -908,10 +1207,11 @@ export class DriveScene extends Phaser.Scene {
     }
 
     const perf = performanceFor(this.health);
-    const max = this.level.maxSpeed * perf.speedFactor;
+    const fp = this.fuelActive ? fuelPerformance(this.fuel) : 1; // an empty tank: a crawl
+    const max = this.level.maxSpeed * perf.speedFactor * fp;
     if (this.phase === 'driving') {
       if (brake) this.v -= PHYSICS.brake * dt;
-      else if (gas) this.v += PHYSICS.accel * perf.accelFactor * dt;
+      else if (gas) this.v += PHYSICS.accel * perf.accelFactor * fp * dt;
       else this.v -= PHYSICS.coast * dt;
     } else if (this.phase === 'finishing') {
       this.v = Math.max(this.v, 260);
@@ -946,6 +1246,7 @@ export class DriveScene extends Phaser.Scene {
     audio.setEngine(this.v / max);
     this.checkBumps(prevX);
     this.wearEffects(dt);
+    this.useFuel(dx, dt, gas && this.phase === 'driving');
 
     // Camera + parallax
     cam.scrollX = Phaser.Math.Clamp(this.bus.x - this.camLead, 0, this.level.length - GAME_W);
@@ -956,6 +1257,7 @@ export class DriveScene extends Phaser.Scene {
 
     this.updateLights(dt, prevFront, front, gas);
     this.updateStops(dt, front, gas);
+    this.updateStations(dt, front, gas);
 
     if (this.phase === 'driving' && front >= this.level.finishX) this.finishRoute();
   }
@@ -971,6 +1273,14 @@ export class DriveScene extends Phaser.Scene {
       if (s.state !== 'waiting') continue;
       const target = s.data.zoneEnd - 70;
       if (front <= target + 4 && target - front <= d) return true;
+    }
+    // Gas station: stop there when the tank is getting empty or the bus is in a bad way.
+    if (this.fuelActive && (this.fuel < 45 || this.health < 60)) {
+      for (const st of this.stations) {
+        if (st.state !== 'waiting') continue;
+        const target = st.zoneEnd - 70;
+        if (front <= target + 4 && target - front <= d) return true;
+      }
     }
     // Speed bumps: be down to a gentle speed when the front wheels get there.
     // (It is the front axle that hits the bump, a good way behind the nose of the bus.)

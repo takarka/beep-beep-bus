@@ -200,6 +200,21 @@ export const Icons = {
     g.fillStyle(C.ink, 0.35);
     g.fillTriangle(-s * 0.3, s * 0.3, -s * 0.26, s * 0.1, -s * 0.1, s * 0.26);
   },
+  /** A fuel pump: the sign of the gas station. */
+  pump(g: G, s: number, color: number = C.cream) {
+    g.fillStyle(color, 1);
+    g.fillRoundedRect(-s * 0.3, -s * 0.38, s * 0.4, s * 0.74, s * 0.07);
+    g.fillRect(-s * 0.36, s * 0.32, s * 0.52, s * 0.08);
+    g.fillStyle(C.ink, 1);
+    g.fillRect(-s * 0.23, -s * 0.3, s * 0.26, s * 0.17);
+    g.lineStyle(s * 0.07, color, 1);
+    g.beginPath();
+    g.moveTo(s * 0.1, -s * 0.2);
+    g.lineTo(s * 0.28, -s * 0.12);
+    g.lineTo(s * 0.28, s * 0.14);
+    g.strokePath();
+    g.fillRect(s * 0.22, s * 0.12, s * 0.12, s * 0.12);
+  },
   /** A ring spanner: "repair / condition of the bus". */
   wrench(g: G, s: number, color: number = C.cream) {
     g.lineStyle(s * 0.17, color, 1);

@@ -198,6 +198,28 @@ class AudioEngine {
     );
   }
 
+  /** The "low fuel" warning: two quick beeps. */
+  lowFuel(): void {
+    if (!this.live()) return;
+    for (const at of [0, 0.22]) this.tone({ freq: 880, dur: 0.14, type: 'triangle', vol: 0.22, at });
+  }
+
+  /** Petrol gurgling into the tank. */
+  fuel(): void {
+    if (!this.live()) return;
+    this.noise(1.6, 0.18, 500, 0, 900);
+    for (let i = 0; i < 6; i++) this.tone({ freq: 300 + i * 70, dur: 0.1, type: 'sine', vol: 0.12, at: 0.12 + i * 0.22, slideTo: 520 + i * 70 });
+  }
+
+  /** Clanking of tools while the bus is mended. */
+  repair(): void {
+    if (!this.live()) return;
+    for (let i = 0; i < 5; i++) {
+      this.tone({ freq: 900, dur: 0.09, type: 'square', vol: 0.08, at: i * 0.3, slideTo: 380 });
+      this.noise(0.07, 0.12, 2500, i * 0.3 + 0.01, 900);
+    }
+  }
+
   /** A worn-out engine coughs. */
   cough(): void {
     if (!this.live()) return;
