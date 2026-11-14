@@ -206,3 +206,56 @@ describe('speed bumps', () => {
     expect(BUMP_ZONE_LENGTH).toBeGreaterThan(0);
   });
 });
+
+import { MAX_HEALTH, bumpDamage, conditionOf, crashDamage, finalStars, performanceFor, starsFor } from '../src/core/rules';
+
+describe('damage to the bus', () => {
+  it('a harder crash does more damage, and our own fault more than being hit', () => {
+    expect(crashDamage(40, true)).toBeLessThan(crashDamage(300, true));
+    expect(crashDamage(200, false)).toBeLessThan(crashDamage(200, true));
+    expect(crashDamage(0, true)).toBeGreaterThan(0);
+    expect(crashDamage(9999, true)).toBe(crashDamage(340, true)); // capped
+  });
+
+  it('bumps: gentle is free, medium a little, hard a lot', () => {
+    expect(bumpDamage(bumpResult(60))).toBe(0);
+    const mid = bumpDamage(bumpResult(180));
+    const hard = bumpDamage(bumpResult(400));
+    expect(mid).toBeGreaterThan(0);
+    expect(hard).toBeGreaterThan(mid * 2);
+    expect(bumpDamage(bumpResult(250))).toBeLessThanOrEqual(bumpDamage(bumpResult(500)));
+  });
+
+  it('a few crashes or hard bumps break a bus; a few careful ones do not', () => {
+    const hardHits = Math.ceil(MAX_HEALTH / bumpDamage(bumpResult(400)));
+    expect(hardHits).toBeLessThanOrEqual(8);
+    expect(hardHits).toBeGreaterThanOrEqual(4);
+    expect(MAX_HEALTH - 3 * bumpDamage(bumpResult(180))).toBeGreaterThan(80);
+  });
+
+  it('a worn bus is slower, never below half speed, a healthy one is untouched', () => {
+    expect(performanceFor(100)).toEqual({ speedFactor: 1, accelFactor: 1 });
+    expect(performanceFor(60).speedFactor).toBe(1);
+    expect(performanceFor(30).speedFactor).toBeCloseTo(0.75);
+    expect(performanceFor(0).speedFactor).toBe(0.5);
+    expect(performanceFor(-20).speedFactor).toBe(0.5);
+    let last = 2;
+    for (let h = 100; h >= 0; h -= 5) {
+      const f = performanceFor(h).speedFactor;
+      expect(f).toBeLessThanOrEqual(last);
+      last = f;
+    }
+  });
+
+  it('condition levels', () => {
+    expect([100, 70, 69, 40, 39, 15, 14, 0].map(conditionOf)).toEqual(['good', 'good', 'worn', 'worn', 'damaged', 'damaged', 'critical', 'critical']);
+  });
+
+  it('a badly damaged bus costs a star, but never the last one', () => {
+    expect(finalStars(0, 100)).toBe(3);
+    expect(finalStars(0, 39)).toBe(2);
+    expect(finalStars(0, 40)).toBe(3);
+    expect(finalStars(3, 0)).toBe(1);
+    expect(finalStars(1, 10)).toBe(starsFor(1) - 1);
+  });
+});

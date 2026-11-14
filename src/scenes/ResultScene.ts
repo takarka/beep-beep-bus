@@ -7,7 +7,7 @@ import { DRIVE_SCALE } from '../bus/geometry';
 import { C, GAME_W } from '../config';
 import { isCompleted, loadProgress, recordResult } from '../core/progress';
 import { MAP_NODES } from '../core/campaign';
-import { starsFor } from '../core/rules';
+import { MAX_HEALTH, finalStars } from '../core/rules';
 import { t, type TextKey } from '../i18n';
 import { Icons, drawStar } from '../ui/draw';
 import { GROUND_Y } from '../ui/textures';
@@ -31,7 +31,8 @@ export class ResultScene extends Phaser.Scene {
     this.scroll = 0;
     const env = resolveEnv(r.level, getSettings().world);
     this.backdrop = createScenery(this, env, { behindUi: true });
-    const stars = starsFor(r.mistakes);
+    const health = r.health ?? 100;
+    const stars = finalStars(r.mistakes, health);
     const firstTime = !isCompleted(loadProgress(), r.level);
     recordResult(r.level, stars, r.score);
 
@@ -91,6 +92,19 @@ export class ResultScene extends Phaser.Scene {
       g.lineBetween(-11, -11, 11, 11);
       g.lineBetween(-11, 11, 11, -11);
     }, r.mistakes);
+
+    // Condition of the bus: crashes and hard bumps wear it out (and a very worn bus costs a star)
+    const hk = Math.min(Math.max(health / MAX_HEALTH, 0), 1);
+    const wrench = this.add.graphics({ x: cx - 150, y: 406 });
+    Icons.wrench(wrench, 34, C.ink);
+    const bar = this.add.graphics();
+    bar.fillStyle(0x9a9fa8, 1);
+    bar.fillRoundedRect(cx - 118, 398, 250, 16, 8);
+    bar.fillStyle(hk >= 0.6 ? C.green : hk >= 0.3 ? C.yellow : C.red, 1);
+    if (hk > 0) bar.fillRoundedRect(cx - 118, 398, Math.max(16, 250 * hk), 16, 8);
+    bar.lineStyle(3, C.ink, 1);
+    bar.strokeRoundedRect(cx - 118, 398, 250, 16, 8);
+    label(this, cx + 178, 406, `${health}%`, { size: 24, color: C.ink, strokeThickness: 0 });
 
     // Buttons
     new Button(this, cx - 210, 470, { r: 42, color: C.red, icon: (g, s) => Icons.home(g, s), onClick: () => this.scene.start('Menu') });

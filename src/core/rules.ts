@@ -116,3 +116,44 @@ export function bumpResult(v: number): BumpResult {
   const k = Math.min(1, (speed - BUMP.hard) / 200);
   return { kind: 'hard', power: 0.7 + 0.3 * k, speedFactor: 0.5, points: POINTS.speedBump };
 }
+
+// ------------------------------------------------------------------ the bus gets damaged
+
+export const MAX_HEALTH = 100;
+
+/**
+ * Crashes and hard bumps break the bus. How much: a crash hurts more the faster we hit
+ * (and more when it is our fault than when somebody runs into us), and so does a bump.
+ */
+export function crashDamage(impact: number, atFault: boolean): number {
+  const base = 8 + Math.min(Math.max(impact, 0), 340) * 0.05;
+  return Math.round(atFault ? base : base * 0.6);
+}
+
+export function bumpDamage(r: BumpResult): number {
+  if (r.kind === 'gentle') return 0;
+  if (r.kind === 'bump') return Math.round(2 + 2 * r.power);
+  return Math.round(9 + 8 * r.power);
+}
+
+/** A damaged bus is slower and weaker: down to half the speed when it is completely worn out. */
+export function performanceFor(health: number): { speedFactor: number; accelFactor: number } {
+  const h = Math.min(Math.max(health, 0), MAX_HEALTH);
+  const f = h >= 60 ? 1 : 0.5 + 0.5 * (h / 60);
+  return { speedFactor: f, accelFactor: f };
+}
+
+export type Condition = 'good' | 'worn' | 'damaged' | 'critical';
+
+export function conditionOf(health: number): Condition {
+  if (health >= 70) return 'good';
+  if (health >= 40) return 'worn';
+  if (health >= 15) return 'damaged';
+  return 'critical';
+}
+
+/** Stars for the route: by mistakes, and one star less if the bus came home badly damaged (never below one). */
+export function finalStars(mistakes: number, health: number): 1 | 2 | 3 {
+  const base = starsFor(mistakes);
+  return health < 40 && base > 1 ? ((base - 1) as 1 | 2) : base;
+}

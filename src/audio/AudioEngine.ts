@@ -198,6 +198,14 @@ class AudioEngine {
     );
   }
 
+  /** A worn-out engine coughs. */
+  cough(): void {
+    if (!this.live()) return;
+    this.tone({ freq: 70, dur: 0.18, type: 'sawtooth', vol: 0.25, slideTo: 40 });
+    this.noise(0.14, 0.2, 700, 0.02, 200);
+    this.tone({ freq: 62, dur: 0.14, type: 'sawtooth', vol: 0.2, at: 0.2, slideTo: 38 });
+  }
+
   /** The wheels thump over a speed bump; harder (`power` 0..1) = deeper and louder. */
   bump(power: number): void {
     if (!this.live()) return;

@@ -28,7 +28,7 @@ import { landmarkForLevel } from '../core/campaign';
 import { drawLandmark } from '../ui/landmarks';
 import { drawLandmarkBig } from '../ui/landmarkScenes';
 import { TrafficManager } from '../traffic/TrafficManager';
-import { BUMP, bumpResult } from '../core/rules';
+import { BUMP, MAX_HEALTH, bumpDamage, bumpResult, conditionOf, crashDamage, performanceFor } from '../core/rules';
 import { LaneTraffic, type LaneCrash } from '../traffic/LaneTraffic';
 import { Crossing } from '../traffic/Crossing';
 import { precipKind, resolveEnv } from '../core/world';
@@ -70,6 +70,8 @@ export interface DriveResult {
   score: number;
   mistakes: number;
   passengers: number;
+  /** Condition of the bus at the end, 0..100. */
+  health: number;
 }
 
 export class DriveScene extends Phaser.Scene {
@@ -88,6 +90,14 @@ export class DriveScene extends Phaser.Scene {
   private assist = false;
   private traffic!: TrafficManager;
   private lane!: LaneTraffic;
+  /** 100 = like new. Crashes and hard bumps wear the bus out. */
+  private health = MAX_HEALTH;
+  private hpC!: Phaser.GameObjects.Container;
+  private hpBar!: G;
+  private hpText!: Phaser.GameObjects.Text;
+  private smoke: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
+  private smokeLevel = 0;
+  private coughTimer = 4;
   /** Speed bumps the bus has already driven over. */
   private bumpsDone = new Set<number>();
   /** Seconds the bus is still shaken after hitting somebody (no gas). */
@@ -128,6 +138,10 @@ export class DriveScene extends Phaser.Scene {
     this.stun = 0;
     this.crashCooldown = 0;
     this.bumpsDone = new Set<number>();
+    this.health = MAX_HEALTH;
+    this.smoke = null;
+    this.smokeLevel = 0;
+    this.coughTimer = 4;
     this.banner = null;
     this.pauseLayer = null;
     this.rng = mulberry32(this.level.level * 31 + 5);
@@ -159,6 +173,7 @@ export class DriveScene extends Phaser.Scene {
     this.level.bumps.forEach((bx) => this.createBump(bx));
     this.createFinish(env.time === 'night');
     this.createHud();
+    this.createHealthBar();
     this.createControls();
 
     audio.startEngine();
@@ -189,18 +204,20 @@ export class DriveScene extends Phaser.Scene {
       ],
       true,
     );
-    // zebra crossing
-    road.fillStyle(C.roadLine, 0.9);
-    for (let sx = x + 26; sx < x + 170; sx += 30) {
-      road.fillPoints(
-        [
-          new Phaser.Math.Vector2(sx + 8, ROAD_TOP),
-          new Phaser.Math.Vector2(sx + 24, ROAD_TOP),
-          new Phaser.Math.Vector2(sx + 12, ROAD_BOTTOM),
-          new Phaser.Math.Vector2(sx - 4, ROAD_BOTTOM),
-        ],
-        true,
-      );
+    // Zebra crossing: the bars run ALONG the road, one behind the other across its width,
+    // and people walk over them (bars across the road would be a pattern for cars, not for people).
+    road.fillStyle(C.roadLine, 0.92);
+    {
+      const rows = 7;
+      const roadH = ROAD_BOTTOM - ROAD_TOP;
+      let y = ROAD_TOP + 8;
+      for (let r = 0; r < rows; r++) {
+        const near = r / (rows - 1); // 0 = far side of the road, 1 = near side
+        const barH = 8 + 4 * near; // nearer bars look a little thicker
+        const slant = -12 * ((y - ROAD_TOP) / roadH); // same slant as the stop line
+        road.fillRoundedRect(x + 26 + slant, y, 144, barH, 3);
+        y += barH + 6 + 3 * near;
+      }
     }
 
     // pole + head on the far sidewalk
@@ -639,6 +656,7 @@ export class DriveScene extends Phaser.Scene {
       const r = bumpResult(this.v);
       this.bus.jolt(r.power);
       audio.bump(r.power);
+      this.damageBus(bumpDamage(r));
       if (r.kind === 'hard') {
         this.cameras.main.shake(280, 0.006 + 0.008 * r.power);
         this.mistakeBump(bx);
@@ -655,6 +673,94 @@ export class DriveScene extends Phaser.Scene {
     this.mistake(t('tooFast'), POINTS.speedBump, bx);
   }
 
+  // ---------------------------------------------------------------- wear and tear
+
+  private createHealthBar(): void {
+    const c = this.add.container(20, 90).setScrollFactor(0).setDepth(90);
+    const panel = this.add.graphics();
+    panel.fillStyle(C.cream, 0.95);
+    panel.fillRoundedRect(0, 0, 272, 34, 14);
+    panel.lineStyle(4, C.ink, 1);
+    panel.strokeRoundedRect(0, 0, 272, 34, 14);
+    const icon = this.add.graphics({ x: 26, y: 17 });
+    Icons.wrench(icon, 30, C.ink);
+    this.hpBar = this.add.graphics();
+    this.hpText = label(this, 172, 18, '100%', { size: 15, color: C.ink, strokeThickness: 0 });
+    c.add([panel, icon, this.hpBar, this.hpText]);
+    this.hpC = c;
+    this.refreshHealthBar();
+  }
+
+  private refreshHealthBar(): void {
+    const w = 184;
+    const k = this.health / MAX_HEALTH;
+    const g = this.hpBar;
+    g.clear();
+    g.fillStyle(0x9a9fa8, 1);
+    g.fillRoundedRect(54, 8, w, 18, 8);
+    g.fillStyle(k >= 0.6 ? C.green : k >= 0.3 ? C.yellow : C.red, 1);
+    if (k > 0) g.fillRoundedRect(54, 8, Math.max(14, w * k), 18, 8);
+    g.lineStyle(3, C.ink, 1);
+    g.strokeRoundedRect(54, 8, w, 18, 8);
+    this.hpText.setText(`${Math.round(this.health)}%`);
+  }
+
+  /** Crashes and hard bumps wear the bus out: it looks battered, smokes, and drives slower. */
+  private damageBus(amount: number): void {
+    if (amount <= 0) return;
+    const before = this.health;
+    this.health = Math.max(0, this.health - amount);
+    const lost = Math.round(before - this.health);
+    if (lost <= 0) return;
+    this.bus.setDamage(1 - this.health / MAX_HEALTH);
+    this.refreshHealthBar();
+    this.tweens.add({ targets: this.hpC, scale: { from: 1.3, to: 1 }, duration: 320, ease: 'Back.easeOut' });
+    floatText(this, this.bus.x + 40, 400, `-${lost}%`, C.red, 40);
+    this.updateSmoke();
+    const was = conditionOf(before);
+    const now = conditionOf(this.health);
+    if (now !== was && (now === 'damaged' || now === 'critical')) {
+      this.time.delayedCall(900, () => this.showBanner(t(now === 'critical' ? 'limping' : 'damaged'), C.orange, 2400, (g) => Icons.wrench(g, 40, C.cream)));
+    }
+  }
+
+  /** Light smoke below 50%, heavy dark smoke below 25%. */
+  private updateSmoke(): void {
+    const level = this.health < 25 ? 2 : this.health < 50 ? 1 : 0;
+    if (level === this.smokeLevel) return;
+    this.smoke?.destroy();
+    this.smoke = null;
+    this.smokeLevel = level;
+    if (level === 0) return;
+    this.smoke = this.add.particles(0, 0, 'dot', {
+      lifespan: 900,
+      speedY: { min: -90, max: -45 },
+      speedX: { min: -40, max: 10 },
+      scale: { start: 0.5, end: 2.2 },
+      alpha: { start: level === 2 ? 0.75 : 0.55, end: 0 },
+      tint: level === 2 ? [0x4a4650, 0x2d2a32] : [0xe0e0e0, 0xb0b0b0],
+      frequency: level === 2 ? 50 : 120,
+      quantity: 1,
+    });
+    this.smoke.setDepth(13);
+  }
+
+  /** A worn bus smokes from the front, and a very worn engine coughs now and then. */
+  private wearEffects(dt: number): void {
+    if (this.smoke) {
+      const L = this.bus.layout;
+      this.smoke.setPosition(this.bus.x + (L.boxFrontX - 70) * this.bus.scaleX, GROUND_Y + (L.top + 18) * this.bus.scaleX);
+    }
+    if (this.health < 40 && this.v > 30) {
+      this.coughTimer -= dt;
+      if (this.coughTimer <= 0) {
+        this.coughTimer = 3 + Math.random() * 3;
+        audio.cough();
+        this.cameras.main.shake(120, 0.0025);
+      }
+    }
+  }
+
   private onCrash(c: LaneCrash): void {
     const cam = this.cameras.main;
     const visible = c.x > cam.scrollX - 120 && c.x < cam.scrollX + GAME_W + 120;
@@ -665,6 +771,7 @@ export class DriveScene extends Phaser.Scene {
       this.stun = 1.1;
       audio.crash();
       this.sparks(c.x);
+      this.damageBus(crashDamage(c.impact, true));
       this.mistake(t('crash'), POINTS.crash, this.bus.x);
     } else if (c.player === 'leader') {
       // Somebody ran into us: not our fault, but it hurts.
@@ -673,6 +780,7 @@ export class DriveScene extends Phaser.Scene {
       audio.crash();
       this.sparks(c.x);
       cam.shake(300, 0.012);
+      this.damageBus(crashDamage(c.impact, false));
       this.showBanner(t('bumped'), C.orange, 1800);
     } else if (visible) {
       audio.crash();
@@ -799,10 +907,11 @@ export class DriveScene extends Phaser.Scene {
       this.startHint = null;
     }
 
-    const max = this.level.maxSpeed;
+    const perf = performanceFor(this.health);
+    const max = this.level.maxSpeed * perf.speedFactor;
     if (this.phase === 'driving') {
       if (brake) this.v -= PHYSICS.brake * dt;
-      else if (gas) this.v += PHYSICS.accel * dt;
+      else if (gas) this.v += PHYSICS.accel * perf.accelFactor * dt;
       else this.v -= PHYSICS.coast * dt;
     } else if (this.phase === 'finishing') {
       this.v = Math.max(this.v, 260);
@@ -836,6 +945,7 @@ export class DriveScene extends Phaser.Scene {
     this.bus.roll(dx, dt, this.v / max);
     audio.setEngine(this.v / max);
     this.checkBumps(prevX);
+    this.wearEffects(dt);
 
     // Camera + parallax
     cam.scrollX = Phaser.Math.Clamp(this.bus.x - this.camLead, 0, this.level.length - GAME_W);
@@ -979,6 +1089,7 @@ export class DriveScene extends Phaser.Scene {
           score: this.score.score,
           mistakes: this.score.mistakes,
           passengers: this.score.passengersMoved,
+          health: Math.round(this.health),
         };
         this.scene.start('Result', result);
       });

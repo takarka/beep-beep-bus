@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { C, FONT, hex, luminance, shade } from '../config';
 import { drawStar } from '../ui/draw';
+import { mulberry32 } from '../core/rng';
 import type { BusDesign, LightType, WheelType } from './design';
 import { computeLayout, type BusLayout } from './geometry';
 
@@ -103,6 +104,9 @@ export class BusView extends Phaser.GameObjects.Container {
   private bobT = 0;
   private beamOn = false;
   private joltTween: Phaser.Tweens.TweenChain | null = null;
+  private damageG: G | null = null;
+  /** 0 = like new, 1 = wrecked. */
+  private damage = 0;
   private joltBase = 0;
 
   constructor(scene: Phaser.Scene, x: number, y: number, design: BusDesign) {
@@ -118,6 +122,87 @@ export class BusView extends Phaser.GameObjects.Container {
     this.leaves = [];
     this.build();
     this.setPassengers(this.passengers);
+  }
+
+  /** How battered the bus looks: 0 = new … 1 = wrecked (scratches, dents, soot, cracked glass, a broken headlight). */
+  setDamage(amount: number): void {
+    this.damage = Math.min(Math.max(amount, 0), 1);
+    this.drawDamage();
+  }
+
+  private drawDamage(): void {
+    const g = this.damageG;
+    if (!g) return;
+    g.clear();
+    const d = this.damage;
+    if (d < 0.04) return;
+    const L = this.layout;
+    const rng = mulberry32(77); // the same cracks every time, they only get more
+    const W = L.boxFrontX - L.backX;
+    const lowTop = L.bottom - 70;
+
+    // scratches along the lower body
+    g.lineStyle(3, C.ink, 0.5);
+    for (let i = 0; i < Math.round(d * 12); i++) {
+      const x = L.backX + 30 + rng() * (W - 90);
+      const y = lowTop + rng() * 44;
+      g.lineBetween(x, y, x + 16 + rng() * 26, y - 5 - rng() * 12);
+    }
+
+    // dents: darker, dull patches, more at the front where we hit things
+    const dents = Math.round(d * 6);
+    for (let i = 0; i < dents; i++) {
+      const front = i % 2 === 0;
+      const x = front ? L.boxFrontX - 40 - rng() * 120 : L.backX + 40 + rng() * (W - 160);
+      const y = L.bottom - 40 - rng() * 70;
+      g.fillStyle(0x000000, 0.16 + 0.1 * d);
+      g.fillEllipse(x, y, 30 + rng() * 34, 16 + rng() * 14);
+      g.lineStyle(2, 0xffffff, 0.35);
+      g.beginPath();
+      g.arc(x, y, 12 + rng() * 10, Math.PI * 1.1, Math.PI * 1.7, false);
+      g.strokePath();
+    }
+
+    // cracked windows: cracks fan out from a hit point
+    const cracked = Math.min(L.windows.length, Math.round(d * L.windows.length * 0.9));
+    for (let i = 0; i < cracked; i++) {
+      const w = L.windows[(i * 3) % L.windows.length]!;
+      const cx = w.x + w.w * (0.3 + 0.4 * rng());
+      const cy = w.y + w.h * (0.3 + 0.4 * rng());
+      g.lineStyle(2.5, C.ink, 0.75);
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2 + rng() * 0.5;
+        const len = 12 + rng() * 22;
+        g.lineBetween(cx, cy, cx + Math.cos(a) * len, cy + Math.sin(a) * len);
+      }
+      g.lineStyle(1.5, C.ink, 0.6);
+      g.strokeCircle(cx, cy, 8 + rng() * 5);
+    }
+    if (d > 0.3) {
+      const s = L.windshield;
+      g.lineStyle(2.5, C.ink, 0.8);
+      g.lineBetween(s.x + 2, s.y + 6, s.x + s.w - 2, s.y + s.h * 0.6);
+      g.lineBetween(s.x + s.w - 2, s.y + 10, s.x + 3, s.y + s.h * 0.8);
+    }
+
+    // soot at the front and a broken headlight
+    if (d > 0.45) {
+      g.fillStyle(0x000000, 0.28);
+      g.fillEllipse(L.boxFrontX - 30, L.top + 34, 70, 40);
+      g.fillEllipse(L.boxFrontX - 90, L.top + 22, 50, 26);
+      g.fillStyle(0x2d2a32, 0.75);
+      g.fillCircle(L.headlight.x, L.headlight.y, 13);
+      g.lineStyle(2.5, 0xffffff, 0.8);
+      g.lineBetween(L.headlight.x - 9, L.headlight.y - 8, L.headlight.x + 9, L.headlight.y + 9);
+      g.lineBetween(L.headlight.x + 8, L.headlight.y - 9, L.headlight.x - 8, L.headlight.y + 8);
+    }
+
+    // a bumper that hangs down
+    if (d > 0.6) {
+      g.fillStyle(0x4a4650, 1);
+      g.lineStyle(3, C.ink, 1);
+      g.fillPoints([new Phaser.Math.Vector2(L.frontX - 16, L.bottom - 8), new Phaser.Math.Vector2(L.frontX + 8, L.bottom - 2), new Phaser.Math.Vector2(L.frontX + 4, L.bottom + 8), new Phaser.Math.Vector2(L.frontX - 20, L.bottom + 1)], true);
+    }
   }
 
   /** Shaken by a speed bump: the front lifts, then the rear, then the bus settles. `power` is 0..1. */
@@ -410,6 +495,11 @@ export class BusView extends Phaser.GameObjects.Container {
     g3.fillRoundedRect(L.taillight.x - 6, L.taillight.y - 10, 10, 20, 3);
     g3.strokeRoundedRect(L.taillight.x - 6, L.taillight.y - 10, 10, 20, 3);
     drawHeadlight(g3, d.lights, L.headlight.x, L.headlight.y);
+
+    // Dents, scratches and cracks (drawn last so they lie over the paint and the glass)
+    this.damageG = new Phaser.GameObjects.Graphics(scene);
+    this.bodyC.add(this.damageG);
+    this.drawDamage();
 
     // Wheel arches
     g3.fillStyle(0x1f1c24, 1);

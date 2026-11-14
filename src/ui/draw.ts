@@ -200,6 +200,13 @@ export const Icons = {
     g.fillStyle(C.ink, 0.35);
     g.fillTriangle(-s * 0.3, s * 0.3, -s * 0.26, s * 0.1, -s * 0.1, s * 0.26);
   },
+  /** A ring spanner: "repair / condition of the bus". */
+  wrench(g: G, s: number, color: number = C.cream) {
+    g.lineStyle(s * 0.17, color, 1);
+    g.lineBetween(-s * 0.32, s * 0.32, s * 0.08, -s * 0.08);
+    g.lineStyle(s * 0.12, color, 1);
+    g.strokeCircle(s * 0.2, -s * 0.2, s * 0.18);
+  },
   /** Car horn: a flared trumpet with sound waves. */
   horn(g: G, s: number, color: number = C.cream) {
     g.fillStyle(color, 1);
