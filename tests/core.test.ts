@@ -44,6 +44,7 @@ describe('design', () => {
   it('sanitizes garbage to a valid design', () => {
     expect(sanitizeDesign(null)).toEqual(DEFAULT_DESIGN);
     expect(sanitizeDesign({ body: 'long' }).body).toBe('bendy'); // old saves
+    expect(sanitizeDesign({ body: 'double' }).body).toBe('van'); // the double-decker became the van
     expect(sanitizeDesign({ body: 'rocket', doors: 9, number: 'ab12345' })).toMatchObject({
       body: 'city',
       doors: 2,
@@ -64,20 +65,22 @@ describe('bus layout', () => {
       for (const wheels of WHEEL_TYPES) {
         it(`${body} / ${doors} doors / ${wheels} wheels fits together`, () => {
           const L = computeLayout({ body, doors, wheels });
-          expect(L.doors).toHaveLength(doors);
+          // the short van has at most two doors: the cab door and a sliding door
+          expect(L.doors).toHaveLength(body === 'van' ? Math.min(doors, 2) : doors);
           L.doors.forEach((d, i) => {
             expect(d.x).toBeGreaterThan(L.backX);
             expect(d.x + d.w).toBeLessThan(L.boxFrontX);
-            for (const wx of L.wheelXs)
-              expect(overlap(d.x, d.x + d.w, wx - L.wheelR, wx + L.wheelR)).toBe(false);
+            // (the van's cab door stands above its front wheel, like on the real thing)
+            const cabDoorOfVan = body === 'van' && i === L.doors.length - 1;
+            if (!cabDoorOfVan)
+              for (const wx of L.wheelXs)
+                expect(overlap(d.x, d.x + d.w, wx - L.wheelR, wx + L.wheelR)).toBe(false);
             const next = L.doors[i + 1];
             if (next) expect(d.x + d.w).toBeLessThan(next.x);
           });
           for (const w of L.windows) {
             expect(w.w).toBeGreaterThan(30);
-            const lowerDeck = L.deckY === null || w.y > L.deckY;
-            if (lowerDeck)
-              for (const d of L.doors) expect(overlap(w.x, w.x + w.w, d.x, d.x + d.w)).toBe(false);
+            for (const d of L.doors) expect(overlap(w.x, w.x + w.w, d.x, d.x + d.w)).toBe(false);
           }
           expect(L.windows.length).toBeGreaterThan(0);
           expect(L.joint !== null).toBe(body === 'bendy');

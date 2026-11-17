@@ -76,7 +76,7 @@ Every level has its own setting: summer, autumn, winter or spring, by day or by 
 
 ## Bus types
 
-City, **articulated "accordion" bus**, double-decker and school bus (with a hood). Saves from the old "long" bus are converted to the articulated one automatically. The bus can be edited at any time through the garage (menu, pause and results screens); the green ▶ in the factory starts the route from any step.
+City, **articulated "accordion" bus**, **retro two-tone van** (in the style of the 1960s Volkswagen Transporter: your colour below the windows, a cream roof and nose, round headlights, chrome bumpers) and school bus (with a hood). Saves from older versions are converted automatically: the "long" bus became the articulated one, the double-decker became the van. The bus can be edited at any time through the garage (menu, pause and results screens); the green ▶ in the factory starts the route from any step.
 
 ## Garage: up to 3 saved buses
 

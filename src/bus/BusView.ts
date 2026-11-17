@@ -321,7 +321,7 @@ export class BusView extends Phaser.GameObjects.Container {
     this.bodyC.add(g);
     const H = L.bottom - L.top;
     const boxW = L.boxFrontX - L.backX;
-    const double = L.deckY !== null;
+    const van = d.body === 'van';
 
     // Hood (school bus)
     if (L.hood) {
@@ -338,41 +338,64 @@ export class BusView extends Phaser.GameObjects.Container {
     }
 
     // Roof unit (retro detail)
-    g.fillStyle(shade(body, -0.1), 1);
-    g.lineStyle(4, ink, 1);
-    const roofX = L.joint ? L.joint.x1 + 60 : L.backX + boxW * 0.3;
-    const roofW = L.joint ? 140 : boxW * 0.28;
-    g.fillRoundedRect(roofX, L.top - 14, roofW, 18, { tl: 8, tr: 8, bl: 2, br: 2 });
-    g.strokeRoundedRect(roofX, L.top - 14, roofW, 18, { tl: 8, tr: 8, bl: 2, br: 2 });
+    if (!van) {
+      g.fillStyle(shade(body, -0.1), 1);
+      g.lineStyle(4, ink, 1);
+      const roofX = L.joint ? L.joint.x1 + 60 : L.backX + boxW * 0.3;
+      const roofW = L.joint ? 140 : boxW * 0.28;
+      g.fillRoundedRect(roofX, L.top - 14, roofW, 18, { tl: 8, tr: 8, bl: 2, br: 2 });
+      g.strokeRoundedRect(roofX, L.top - 14, roofW, 18, { tl: 8, tr: 8, bl: 2, br: 2 });
+    }
 
     // Main body
-    const radii = { tl: 18, tr: L.hood ? 14 : double ? 34 : 44, bl: 10, br: L.hood ? 4 : 14 };
-    g.fillStyle(body, 1);
-    g.fillRoundedRect(L.backX, L.top, boxW, H, radii);
-    // Darker skirt along the bottom
-    g.fillStyle(bodyDark, 1);
-    g.fillRoundedRect(L.backX + 2, L.bottom - 22, boxW - 4, 20, { tl: 2, tr: 2, bl: 9, br: L.hood ? 3 : 12 });
+    const radii = { tl: 18, tr: L.hood ? 14 : 44, bl: 10, br: L.hood ? 4 : 14 };
+    const winBottom = Math.max(...L.windows.map((w) => w.y + w.h));
+    // The van is two-tone: the paint you chose below the windows, a cream roof and nose above.
+    const belt = winBottom + 10;
+    const vanRadii = { tl: 46, tr: 36, bl: 14, br: 18 };
+    if (van) {
+      g.fillStyle(0xfff6e0, 1);
+      g.fillRoundedRect(L.backX, L.top, boxW, H, vanRadii);
+      g.fillStyle(body, 1);
+      g.fillRoundedRect(L.backX, belt, boxW, L.bottom - belt, { tl: 0, tr: 0, bl: 14, br: 18 });
+      // white wedge of the nose (the "V") at the front, a darker waist line and a chrome strip
+      g.fillStyle(0xfff6e0, 1);
+      g.fillPoints([new Phaser.Math.Vector2(L.frontX - 44, belt), new Phaser.Math.Vector2(L.frontX, belt), new Phaser.Math.Vector2(L.frontX, L.bottom - 10), new Phaser.Math.Vector2(L.frontX - 16, L.bottom - 10)], true);
+      g.lineStyle(3, bodyDark, 1);
+      g.lineBetween(L.backX + 4, belt, L.frontX - 44, belt);
+      g.lineStyle(3, 0xe8edf2, 1);
+      g.lineBetween(L.backX + 4, belt + 4, L.frontX - 40, belt + 4);
+      // engine louvres at the back
+      g.lineStyle(3, bodyDark, 1);
+      for (let i = 0; i < 4; i++) g.lineBetween(L.backX + 14 + i * 7, belt + 12, L.backX + 14 + i * 7, belt + 28);
+    } else {
+      g.fillStyle(body, 1);
+      g.fillRoundedRect(L.backX, L.top, boxW, H, radii);
+      // Darker skirt along the bottom
+      g.fillStyle(bodyDark, 1);
+      g.fillRoundedRect(L.backX + 2, L.bottom - 22, boxW - 4, 20, { tl: 2, tr: 2, bl: 9, br: L.hood ? 3 : 12 });
+    }
 
     // Decor (drawn before windows/doors so they sit on top)
-    const lowerTop = L.deckY ?? L.top;
-    const winBottom = Math.max(...L.windows.filter((w) => w.y > lowerTop - 1).map((w) => w.y + w.h));
-    const bandY = winBottom + 10;
-    const bandH = L.bottom - 26 - bandY;
+    const bandY = van ? belt + 4 : winBottom + 10;
+    const bandH = van ? L.bottom - 8 - bandY : L.bottom - 26 - bandY;
     switch (d.decor) {
       case 'stripe':
         g.fillStyle(accent, 1);
-        g.fillRect(L.backX + 3, bandY + bandH * 0.25, boxW - 6, Math.max(8, bandH * 0.4));
-        if (double) g.fillRect(L.backX + 3, (L.deckY as number) - 8, boxW - 6, 12);
-        else g.fillRect(L.backX + 3, L.top + 34 - 7, boxW - 6, 5);
+        if (van) g.fillRect(L.backX + 3, belt + 12, boxW - 6, 7);
+        else {
+          g.fillRect(L.backX + 3, bandY + bandH * 0.25, boxW - 6, Math.max(8, bandH * 0.4));
+          g.fillRect(L.backX + 3, L.top + 34 - 7, boxW - 6, 5);
+        }
         break;
       case 'dots':
         g.fillStyle(accent, 0.9);
         for (let x = L.backX + 30; x < L.boxFrontX - 24; x += 34)
-          g.fillCircle(x, bandY + bandH / 2 + ((x / 34) % 2 ? -4 : 4), Math.min(9, bandH * 0.32));
+          g.fillCircle(x, bandY + bandH / 2 + ((x / 34) % 2 ? -4 : 4), Math.min(van ? 7 : 9, bandH * 0.32));
         break;
       case 'stars':
-        for (let x = L.backX + 40; x < L.boxFrontX - 30; x += 70)
-          drawStar(g, x, bandY + bandH / 2, Math.min(15, bandH * 0.5), accent, null);
+        for (let x = L.backX + 40; x < L.boxFrontX - 30; x += van ? 56 : 70)
+          drawStar(g, x, bandY + bandH / 2, Math.min(van ? 11 : 15, bandH * 0.5), accent, null);
         break;
       case 'none':
         break;
@@ -380,10 +403,13 @@ export class BusView extends Phaser.GameObjects.Container {
 
     // Body outline on top of decor
     g.lineStyle(5, ink, 1);
-    g.strokeRoundedRect(L.backX, L.top, boxW, H, radii);
-    if (double) {
-      g.lineStyle(3, bodyDark, 1);
-      g.lineBetween(L.backX + 4, L.deckY as number, L.boxFrontX - 4, L.deckY as number);
+    g.strokeRoundedRect(L.backX, L.top, boxW, H, van ? vanRadii : radii);
+    if (van) {
+      // a round badge on the nose (a plain one: no brand)
+      g.fillStyle(0xdfe3e8, 1);
+      g.lineStyle(3, ink, 1);
+      g.fillCircle(L.frontX - 14, belt + 18, 8);
+      g.strokeCircle(L.frontX - 14, belt + 18, 8);
     }
 
     // Accordion joint of the articulated bus: dark folded bellows between the two sections.
@@ -406,7 +432,7 @@ export class BusView extends Phaser.GameObjects.Container {
     // Windows (glass)
     for (const w of L.windows) {
       g.fillStyle(C.glass, 1);
-      g.fillRoundedRect(w.x, w.y, w.w, w.h, 8);
+      g.fillRoundedRect(w.x, w.y, w.w, w.h, van ? 12 : 8);
     }
     g.fillStyle(C.glass, 1);
     g.fillRoundedRect(L.windshield.x, L.windshield.y, L.windshield.w, L.windshield.h, { tl: 4, tr: 12, bl: 4, br: 6 });
@@ -419,7 +445,7 @@ export class BusView extends Phaser.GameObjects.Container {
     this.bodyC.add(g2);
     g2.lineStyle(4, ink, 1);
     for (const w of L.windows) {
-      g2.strokeRoundedRect(w.x, w.y, w.w, w.h, 8);
+      g2.strokeRoundedRect(w.x, w.y, w.w, w.h, van ? 12 : 8);
       g2.lineStyle(4, 0xffffff, 0.55);
       g2.lineBetween(w.x + 8, w.y + w.h * 0.55, w.x + w.w * 0.45, w.y + 6);
       g2.lineStyle(4, ink, 1);
@@ -443,7 +469,7 @@ export class BusView extends Phaser.GameObjects.Container {
     const routeText = new Phaser.GameObjects.Text(scene, rs.x + rs.w / 2, rs.y + rs.h / 2 + 1, d.number, {
       fontFamily: FONT,
       fontStyle: '800',
-      fontSize: '20px',
+      fontSize: `${Math.round(rs.h * 0.8)}px`,
       color: '#ffb703',
     }).setOrigin(0.5);
 
@@ -456,7 +482,7 @@ export class BusView extends Phaser.GameObjects.Container {
     const numText = new Phaser.GameObjects.Text(scene, nb.x, nb.y + 1, d.number, {
       fontFamily: FONT,
       fontStyle: '800',
-      fontSize: d.number.length > 2 ? '20px' : '26px',
+      fontSize: `${Math.round(nb.r * (d.number.length > 2 ? 0.8 : 1))}px`,
       color: hex(ink),
     }).setOrigin(0.5);
 
@@ -470,9 +496,18 @@ export class BusView extends Phaser.GameObjects.Container {
         leaf.x = side < 0 ? door.x : door.x + door.w;
         leaf.y = door.y;
         const x0 = side < 0 ? 0 : -half;
-        leaf.fillStyle(shade(body, -0.08), 1);
         leaf.lineStyle(3, ink, 1);
-        leaf.fillRect(x0, 0, half, door.h);
+        if (van) {
+          // two-tone like the rest of the van: cream above the waist line, the chosen colour below
+          const bl = belt - door.y;
+          leaf.fillStyle(0xfff6e0, 1);
+          leaf.fillRect(x0, 0, half, door.h);
+          leaf.fillStyle(shade(body, -0.05), 1);
+          leaf.fillRect(x0, bl, half, door.h - bl);
+        } else {
+          leaf.fillStyle(shade(body, -0.08), 1);
+          leaf.fillRect(x0, 0, half, door.h);
+        }
         leaf.strokeRect(x0, 0, half, door.h);
         leaf.fillStyle(C.glass, 1);
         leaf.fillRoundedRect(x0 + 5, 6, half - 10, door.h * 0.62, 4);
@@ -485,7 +520,7 @@ export class BusView extends Phaser.GameObjects.Container {
     // Lights and bumpers
     const g3 = new Phaser.GameObjects.Graphics(scene);
     this.bodyC.add(g3);
-    g3.fillStyle(0x4a4650, 1);
+    g3.fillStyle(van ? 0xdfe3e8 : 0x4a4650, 1); // chrome bumpers on the van
     g3.lineStyle(3, ink, 1);
     g3.fillRoundedRect(L.frontX - 10, L.bottom - 16, 16, 14, 4);
     g3.strokeRoundedRect(L.frontX - 10, L.bottom - 16, 16, 14, 4);

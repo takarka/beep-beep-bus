@@ -68,7 +68,7 @@
 
 ## 🎨 Version 0.4: garage and rewards
 
-- [ ] Points unlock new parts: trolleybus, double-decker with an open roof, spoilers, horns, flags
+- [ ] Points unlock new parts: trolleybus, a double-decker with an open roof (it was replaced by the van), spoilers, horns, flags
 - [ ] Sticker album / achievements ("10 stops without mistakes")
 - [ ] Bus photo: save a picture of your bus
 

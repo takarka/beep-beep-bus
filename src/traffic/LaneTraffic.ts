@@ -118,7 +118,7 @@ export class LaneTraffic {
     let scale: number;
     let cruise: number;
     if (kind === 'bus') {
-      const body = pick(this.rng, ['city', 'city', 'bendy', 'double'] as const);
+      const body = pick(this.rng, ['city', 'city', 'bendy', 'van'] as const);
       const design: BusDesign = {
         body,
         doors: 2,

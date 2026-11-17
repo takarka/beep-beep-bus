@@ -1,4 +1,4 @@
-export const BODY_TYPES = ['city', 'bendy', 'double', 'school'] as const;
+export const BODY_TYPES = ['city', 'bendy', 'van', 'school'] as const;
 export const DOOR_COUNTS = [1, 2, 3] as const;
 export const WHEEL_TYPES = ['classic', 'sport', 'big', 'retro'] as const;
 export const LIGHT_TYPES = ['round', 'square', 'eyes', 'star'] as const;
@@ -53,8 +53,8 @@ export function sanitizeDesign(raw: unknown): BusDesign {
       ? r.color
       : DEFAULT_DESIGN.color;
   return {
-    // Older saves used a plain "long" bus, which became the articulated one.
-    body: oneOf(BODY_TYPES, r.body === 'long' ? 'bendy' : r.body, DEFAULT_DESIGN.body),
+    // Older saves: the plain "long" bus became the articulated one, the double-decker became the van.
+    body: oneOf(BODY_TYPES, r.body === 'long' ? 'bendy' : r.body === 'double' ? 'van' : r.body, DEFAULT_DESIGN.body),
     doors: oneOf(DOOR_COUNTS, r.doors, DEFAULT_DESIGN.doors),
     wheels: oneOf(WHEEL_TYPES, r.wheels, DEFAULT_DESIGN.wheels),
     color,
