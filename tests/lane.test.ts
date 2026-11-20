@@ -259,3 +259,91 @@ describe('damage to the bus', () => {
     expect(finalStars(1, 10)).toBe(starsFor(1) - 1);
   });
 });
+
+import { laneClear, wantsToOvertake } from '../src/traffic/ai';
+
+describe('overtaking: when may a driver change lanes', () => {
+  const me = { x: 1000, len: 180, v: 220 };
+
+  it('an empty lane is clear', () => {
+    expect(laneClear(me, [])).toBe(true);
+  });
+
+  it('nobody alongside or overlapping', () => {
+    expect(laneClear(me, [{ x: 1000, len: 180, v: 220 }])).toBe(false);
+    expect(laneClear(me, [{ x: 1150, len: 180, v: 220 }])).toBe(false); // right next to us
+  });
+
+  it('a vehicle ahead needs room to brake, more if we are faster than it', () => {
+    // its rear is 190 px in front of our nose
+    const o = { x: 1000 + 90 + 190 + 90, len: 180, v: 220 };
+    expect(laneClear(me, [o])).toBe(true);
+    expect(laneClear(me, [{ ...o, v: 60 }])).toBe(false); // it is much slower: we would run into it
+  });
+
+  it('a vehicle behind needs room, more if it is faster', () => {
+    const o = { x: 1000 - 90 - 200 - 90, len: 180, v: 220 }; // 200 px behind our tail
+    expect(laneClear(me, [o])).toBe(true);
+    expect(laneClear(me, [{ ...o, v: 420 }])).toBe(false); // coming up fast: don't cut in
+    expect(laneClear(me, [{ x: 1000 - 90 - 60 - 90, len: 180, v: 220 }])).toBe(false); // right on our tail
+  });
+
+  it('a driver wants to overtake only a slower vehicle that is close', () => {
+    expect(wantsToOvertake(230, 230, null)).toBe(false);
+    expect(wantsToOvertake(230, 230, { gap: 100, v: 140 })).toBe(true);
+    expect(wantsToOvertake(230, 230, { gap: 100, v: 225 })).toBe(false); // about as fast: no point
+    expect(wantsToOvertake(230, 230, { gap: 900, v: 100 })).toBe(false); // still far away
+    expect(wantsToOvertake(230, 120, { gap: 100, v: 0 })).toBe(true); // a stopped bus
+  });
+});
+
+import { NITRO, fuelUse, nitroStep, type NitroState } from '../src/core/rules';
+
+describe('nitro', () => {
+  /** Holds the nitro button (or not) for `seconds` and reports what happened. */
+  const run = (wanted: boolean, seconds: number, start: NitroState = { nitro: NITRO.max, locked: false }) => {
+    let s: NitroState = start;
+    let boostingTime = 0;
+    let firstBoost = -1;
+    for (let t = 0; t < seconds; t += 1 / 60) {
+      const r = nitroStep(s, wanted, 1 / 60);
+      s = { nitro: r.nitro, locked: r.locked };
+      if (r.boosting) {
+        boostingTime += 1 / 60;
+        if (firstBoost < 0) firstBoost = t;
+      }
+    }
+    return { ...s, boostingTime, firstBoost };
+  };
+
+  it('a full tank lasts about 2.6 seconds, then it is empty and locked', () => {
+    const r = run(true, 3);
+    expect(r.boostingTime).toBeGreaterThan(2.3);
+    expect(r.boostingTime).toBeLessThan(2.9);
+    expect(r.nitro).toBeLessThan(5);
+    expect(r.locked).toBe(true);
+  });
+
+  it('it refills by itself when not used, and is capped', () => {
+    expect(run(false, 20, { nitro: 0, locked: true }).nitro).toBe(NITRO.max);
+    expect(run(false, 3, { nitro: 0, locked: true }).nitro).toBeCloseTo(NITRO.recharge * 3, 0);
+  });
+
+  it('after running dry it cannot be used again until a little has refilled', () => {
+    // holding the button on an empty tank: nothing for about (minToStart / recharge) seconds, then a short burst
+    const r = run(true, 6, { nitro: 0, locked: true });
+    expect(r.firstBoost).toBeGreaterThan(NITRO.minToStart / NITRO.recharge - 0.3);
+    expect(r.firstBoost).toBeLessThan(NITRO.minToStart / NITRO.recharge + 0.3);
+    expect(nitroStep({ nitro: 0, locked: true }, true, 0.1).boosting).toBe(false);
+  });
+
+  it('boosting costs more petrol', () => {
+    expect(fuelUse(1000, 4, 300, true, true)).toBeGreaterThan(fuelUse(1000, 4, 300, true, false) * 1.5);
+  });
+
+  it('is a clear boost, but not absurd', () => {
+    expect(NITRO.speedFactor).toBeGreaterThan(1.2);
+    expect(NITRO.speedFactor).toBeLessThan(1.7);
+    expect(NITRO.accelFactor).toBeGreaterThan(1.5);
+  });
+});

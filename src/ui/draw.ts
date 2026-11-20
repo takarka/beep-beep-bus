@@ -200,6 +200,25 @@ export const Icons = {
     g.fillStyle(C.ink, 0.35);
     g.fillTriangle(-s * 0.3, s * 0.3, -s * 0.26, s * 0.1, -s * 0.1, s * 0.26);
   },
+  /** Flame: the nitro boost. */
+  flame(g: G, s: number, color: number = C.cream) {
+    g.fillStyle(color, 1);
+    g.fillPoints(
+      [
+        new Phaser.Math.Vector2(0, -s * 0.42),
+        new Phaser.Math.Vector2(s * 0.22, -s * 0.1),
+        new Phaser.Math.Vector2(s * 0.3, s * 0.12),
+        new Phaser.Math.Vector2(s * 0.14, s * 0.38),
+        new Phaser.Math.Vector2(-s * 0.14, s * 0.38),
+        new Phaser.Math.Vector2(-s * 0.3, s * 0.12),
+        new Phaser.Math.Vector2(-s * 0.18, -s * 0.14),
+        new Phaser.Math.Vector2(-s * 0.06, s * 0.02),
+      ],
+      true,
+    );
+    g.fillStyle(C.orange, 1);
+    g.fillCircle(0, s * 0.18, s * 0.11);
+  },
   /** A fuel pump: the sign of the gas station. */
   pump(g: G, s: number, color: number = C.cream) {
     g.fillStyle(color, 1);

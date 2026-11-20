@@ -179,8 +179,8 @@ export const LOW_FUEL = 25;
  * Petrol used by a move of `dx` px taking `dt` seconds: more per px the faster we go,
  * a bit extra while pushing the gas, and a little just for idling (waiting at a light).
  */
-export function fuelUse(dx: number, dt: number, v: number, accelerating: boolean): number {
-  return Math.max(0, dx) * (0.0028 + 0.0000028 * Math.max(0, v)) + dt * (0.2 + (accelerating ? 0.5 : 0));
+export function fuelUse(dx: number, dt: number, v: number, accelerating: boolean, boosting = false): number {
+  return (boosting ? NITRO.fuelFactor : 1) * Math.max(0, dx) * (0.0016 + 0.0000016 * Math.max(0, v)) + dt * (0.2 + (accelerating ? 0.5 : 0)) * (boosting ? NITRO.fuelFactor : 1);
 }
 
 /** With an empty tank the bus only crawls. */
@@ -195,4 +195,43 @@ export function repairPlan(missingHealth: number, score: number): { percent: num
   const affordable = Math.floor(Math.max(0, score) / REPAIR_COST_PER_PERCENT);
   const percent = Math.min(missing, affordable);
   return { percent, cost: Math.ceil(percent * REPAIR_COST_PER_PERCENT) };
+}
+
+// ------------------------------------------------------------------ nitro: a short burst of speed
+
+export const NITRO = {
+  max: 100,
+  /** Used up per second of boosting: about 2.6 s from a full tank. */
+  use: 38,
+  /** Refills per second when not used: about 14 s from empty. */
+  recharge: 7,
+  /** After running dry it can only be used again once this much has refilled. */
+  minToStart: 20,
+  /** Top speed and pull while boosting, compared with normal. */
+  speedFactor: 1.45,
+  accelFactor: 2.6,
+  /** Boosting burns petrol this much faster. */
+  fuelFactor: 1.8,
+  /** Nitro given for serving a bus stop properly. */
+  stopReward: 20,
+} as const;
+
+export interface NitroState {
+  nitro: number;
+  /** True after running dry, until enough has refilled. */
+  locked: boolean;
+}
+
+/** One step of the nitro tank: drains while boosting (and wanted), refills otherwise. */
+export function nitroStep(state: NitroState, wanted: boolean, dt: number): NitroState & { boosting: boolean } {
+  let { nitro, locked } = state;
+  if (locked && nitro >= NITRO.minToStart) locked = false;
+  const boosting = wanted && !locked && nitro > 0;
+  if (boosting) {
+    nitro = Math.max(0, nitro - NITRO.use * dt);
+    if (nitro <= 0) locked = true;
+  } else {
+    nitro = Math.min(NITRO.max, nitro + NITRO.recharge * dt);
+  }
+  return { nitro, locked, boosting };
 }

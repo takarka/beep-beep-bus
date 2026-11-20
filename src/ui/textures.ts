@@ -204,14 +204,19 @@ const street: Gen = (scene, env, p, key) => {
   // road
   g.fillStyle(p.road, 1);
   g.fillRect(0, 50, W, 130);
-  g.fillStyle(shade(p.road, 0.06), 1);
-  for (let x = 0; x < W; x += 128) g.fillRect(x + 30, 70, 40, 3);
+  // four lanes: a dashed line between the two lanes of each direction, a double yellow line in the middle
   g.fillStyle(p.roadLine, 1);
-  for (let x = 0; x < W; x += 128) g.fillRect(x + 32, 110, 64, 6);
+  for (let x = 0; x < W; x += 128) {
+    g.fillRect(x + 32, 80, 64, 4);
+    g.fillRect(x + 32, 146, 64, 4);
+  }
+  g.fillStyle(night ? 0xc9a93a : 0xf2c230, 1);
+  g.fillRect(0, 111, W, 3);
+  g.fillRect(0, 117, W, 3);
   if (env.precip && env.season !== 'winter') {
     // wet road: soft puddle shines
     g.fillStyle(0xffffff, night ? 0.1 : 0.14);
-    for (const [px, py, pw] of [[60, 140, 90], [250, 76, 70], [400, 150, 80]] as const) g.fillEllipse(px, py, pw, 9);
+    for (const [px, py, pw] of [[60, 134, 90], [250, 66, 70], [400, 164, 80], [170, 98, 60]] as const) g.fillEllipse(px, py, pw, 9);
   }
   // near curb + sidewalk
   g.fillStyle(p.curb, 1);

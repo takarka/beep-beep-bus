@@ -35,10 +35,10 @@ export interface LevelData {
 }
 
 export const START_X = 470;
-const FIRST_ITEM_X = 2300;
+const FIRST_ITEM_X = 3200;
 /** Minimum / maximum distance between two neighbouring lights or stops (world px). */
-export const MIN_GAP = 2100;
-export const MAX_GAP = 2700;
+export const MIN_GAP = 3300;
+export const MAX_GAP = 4100;
 
 /** More stops and lights as the route goes on: 3 on levels 1–2 up to 8 on levels 11–12. */
 export function levelCounts(level: number): { stops: number; lights: number } {

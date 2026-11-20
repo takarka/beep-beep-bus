@@ -40,6 +40,7 @@ class AudioEngine {
   private step = 0;
 
   private sirenNode: OscillatorNode | null = null;
+  private nitroNode: OscillatorNode | null = null;
   private rain: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
   private engine: { osc: OscillatorNode; osc2: OscillatorNode; gain: GainNode } | null = null;
 
@@ -196,6 +197,32 @@ class AudioEngine {
     notes.forEach((n, i) =>
       this.tone({ freq: midi(n), dur: i === notes.length - 1 ? 0.6 : 0.16, type: 'triangle', vol: 0.25, at: times[i] }),
     );
+  }
+
+  /** Nitro: a whoosh that lasts while the boost is on. */
+  nitroOn(): void {
+    const ctx = this.live();
+    if (!ctx || this.nitroNode) return;
+    this.tone({ freq: 160, dur: 0.35, type: 'sawtooth', vol: 0.18, slideTo: 620 });
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(110, ctx.currentTime);
+    osc.frequency.linearRampToValueAtTime(190, ctx.currentTime + 0.4);
+    gain.gain.value = 0.06;
+    osc.connect(gain).connect(this.sfxBus);
+    osc.start();
+    this.nitroNode = osc;
+    this.noise(1.2, 0.2, 1200, 0, 3500);
+  }
+
+  nitroOff(): void {
+    try {
+      this.nitroNode?.stop();
+    } catch {
+      /* already stopped */
+    }
+    this.nitroNode = null;
   }
 
   /** The "low fuel" warning: two quick beeps. */

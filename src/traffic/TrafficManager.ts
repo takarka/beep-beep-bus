@@ -4,15 +4,17 @@ import type { LightState } from '../core/traffic';
 import { mulberry32, pick, randRange, type Rng } from '../core/rng';
 import { AI, ONCOMING_STOP_OFFSET, SPECS, bumpZones, nextSpeed, pickKind, spawnDelay, targetSpeed, type VehicleKind } from './ai';
 import { CAR_COLORS, MINIBUS_COLORS, VehicleView } from './VehicleView';
+import { depthForY } from './Crossing';
+import { LANE_Y } from './lanes';
 
-/** Wheels of the oncoming lane touch the road here (just above the lane dashes). */
-export const ONCOMING_GROUND_Y = 542;
+/** The two oncoming lanes: 0 = the one next to the middle line, 1 = the far one. */
+const ONCOMING_Y = [LANE_Y.oncomingNear, LANE_Y.oncomingFar] as const;
 /**
  * Drawing scale per kind, chosen so the proportions to our bus (about 380 px long, 150 px tall) look real:
  * a car is roughly 45% of its length, a small bus about 60%. A bit smaller than the near lane: perspective.
  */
 const SCALES: Record<VehicleKind, number> = { car: 1.12, police: 1.12, minibus: 0.92 };
-const MAX_VEHICLES = 7;
+const MAX_VEHICLES = 9;
 const SPAWN_AHEAD = 320;
 const SPAWN_GAP = 250;
 
@@ -26,6 +28,8 @@ interface Vehicle {
   /** World length (scaled). */
   len: number;
   scale: number;
+  /** 0 = near oncoming lane, 1 = far oncoming lane. */
+  lane: 0 | 1;
 }
 
 export interface SignalState {
@@ -53,23 +57,23 @@ export class TrafficManager {
   /** Puts a few vehicles on the road so it isn't empty at the start. */
   prewarm(scrollX: number): void {
     let x = scrollX + 140 + this.rng() * 200;
-    while (x < scrollX + GAME_W + 200 && this.vehicles.length < 4) {
+    while (x < scrollX + GAME_W + 200 && this.vehicles.length < 6) {
       const v = this.spawn(x);
-      x += v.len + 330 + this.rng() * 350;
+      x += v.len * 0.6 + 200 + this.rng() * 300;
     }
   }
 
-  private spawn(x: number): Vehicle {
+  private spawn(x: number, lane: 0 | 1 = this.rng() < 0.6 ? 0 : 1): Vehicle {
     const kind = pickKind(this.rng, this.vehicles.some((v) => v.kind === 'police'));
     const spec = SPECS[kind];
     const color = kind === 'minibus' ? pick(this.rng, MINIBUS_COLORS) : pick(this.rng, CAR_COLORS);
     const view = new VehicleView(this.scene, kind, color, this.rng() < 0.5 ? 0 : 1, this.opts.night);
-    view.setDepth(5);
-    const scale = SCALES[kind];
+    const scale = SCALES[kind] * (lane === 1 ? 0.93 : 1); // the far lane is a bit smaller: perspective
     view.setScale(-scale, scale); // mirrored: drives left
-    view.setPosition(x, ONCOMING_GROUND_Y);
+    view.setPosition(x, ONCOMING_Y[lane]);
+    view.setDepth(depthForY(ONCOMING_Y[lane]));
     const cruise = randRange(this.rng, spec.cruise[0], spec.cruise[1]);
-    const vehicle: Vehicle = { kind, view, x, v: cruise, cruise, len: spec.length * scale, scale };
+    const vehicle: Vehicle = { kind, view, x, v: cruise, cruise, len: spec.length * scale, scale, lane };
     this.vehicles.push(vehicle);
     return vehicle;
   }
@@ -77,10 +81,10 @@ export class TrafficManager {
   update(dt: number, scrollX: number, signals: readonly SignalState[]): void {
     const lights = signals.map((s) => ({ stopX: s.lineX + ONCOMING_STOP_OFFSET, state: s.state }));
 
-    // Leaders first: the vehicle with the smallest x is furthest along its way.
+    // Each lane has its own queue. Leaders first: the vehicle with the smallest x is furthest along.
     const ordered = this.vehicles.slice().sort((a, b) => a.x - b.x);
-    ordered.forEach((veh, i) => {
-      const leader = i > 0 ? ordered[i - 1]! : null;
+    ordered.forEach((veh) => {
+      const leader = ordered.filter((o) => o.lane === veh.lane && o.x < veh.x).pop() ?? null;
       const target = targetSpeed({
         cruise: veh.cruise,
         v: veh.v,
@@ -112,15 +116,19 @@ export class TrafficManager {
 
   /** A little hop as the vehicle drives over a bump. */
   private hop(veh: Vehicle): void {
-    this.scene.tweens.add({ targets: veh.view, y: ONCOMING_GROUND_Y - 7, yoyo: true, duration: 110, ease: 'Quad.easeOut' });
+    this.scene.tweens.add({ targets: veh.view, y: ONCOMING_Y[veh.lane] - 7, yoyo: true, duration: 110, ease: 'Quad.easeOut' });
   }
 
   private trySpawn(scrollX: number): boolean {
     if (this.vehicles.length >= MAX_VEHICLES) return false;
     const x = scrollX + GAME_W + SPAWN_AHEAD;
-    // Wait while a queue (e.g. at a red light) still reaches the spawn point.
-    if (this.vehicles.some((v) => Math.abs(v.x - x) < v.len / 2 + 110 + SPAWN_GAP + AI.minGap)) return false;
-    this.spawn(x);
-    return true;
+    // Pick a lane that is free; wait while a queue (e.g. at a red light) still reaches the spawn point.
+    const lanes: Array<0 | 1> = this.rng() < 0.6 ? [0, 1] : [1, 0];
+    for (const lane of lanes) {
+      if (this.vehicles.some((v) => v.lane === lane && Math.abs(v.x - x) < v.len / 2 + 110 + SPAWN_GAP + AI.minGap)) continue;
+      this.spawn(x, lane);
+      return true;
+    }
+    return false;
   }
 }

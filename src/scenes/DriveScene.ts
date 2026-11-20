@@ -28,7 +28,7 @@ import { landmarkForLevel } from '../core/campaign';
 import { drawLandmark } from '../ui/landmarks';
 import { drawLandmarkBig } from '../ui/landmarkScenes';
 import { TrafficManager } from '../traffic/TrafficManager';
-import { BUMP, LOW_FUEL, MAX_FUEL, MAX_HEALTH, bumpDamage, bumpResult, conditionOf, crashDamage, fuelPerformance, fuelUse, performanceFor, repairPlan } from '../core/rules';
+import { BUMP, LOW_FUEL, MAX_FUEL, MAX_HEALTH, NITRO, bumpDamage, bumpResult, conditionOf, crashDamage, fuelPerformance, fuelUse, nitroStep, performanceFor, repairPlan } from '../core/rules';
 import { LaneTraffic, type LaneCrash } from '../traffic/LaneTraffic';
 import { Crossing } from '../traffic/Crossing';
 import { precipKind, resolveEnv } from '../core/world';
@@ -118,6 +118,16 @@ export class DriveScene extends Phaser.Scene {
   private emptyTimer = 0;
   private stations: StationRt[] = [];
   private stillTimeSt = 0;
+  /** Nitro: a short burst of speed. */
+  private nitro: number = NITRO.max;
+  private nitroLocked = false;
+  private boosting = false;
+  private nitroBtn!: HoldButton;
+  private nitroC!: Phaser.GameObjects.Container;
+  private nitroBar!: G;
+  private nitroShown = -1;
+  private flame: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
+  private streaks: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
   /** Speed bumps the bus has already driven over. */
   private bumpsDone = new Set<number>();
   /** Seconds the bus is still shaken after hitting somebody (no gas). */
@@ -130,7 +140,7 @@ export class DriveScene extends Phaser.Scene {
 
   private gas!: HoldButton;
   private brake!: HoldButton;
-  private keys!: Record<'right' | 'left' | 'up' | 'down' | 'd' | 'a' | 'w' | 's', Phaser.Input.Keyboard.Key>;
+  private keys!: Record<'right' | 'left' | 'up' | 'down' | 'd' | 'a' | 'w' | 's' | 'shift' | 'n', Phaser.Input.Keyboard.Key>;
   private scoreText!: Phaser.GameObjects.Text;
   private paxText!: Phaser.GameObjects.Text;
   private progressBus!: G;
@@ -169,6 +179,12 @@ export class DriveScene extends Phaser.Scene {
     this.emptyTimer = 0;
     this.stations = [];
     this.stillTimeSt = 0;
+    this.nitro = NITRO.max;
+    this.nitroLocked = false;
+    this.boosting = false;
+    this.nitroShown = -1;
+    this.flame = null;
+    this.streaks = null;
     this.banner = null;
     this.pauseLayer = null;
     this.rng = mulberry32(this.level.level * 31 + 5);
@@ -202,6 +218,7 @@ export class DriveScene extends Phaser.Scene {
     this.createFinish(env.time === 'night');
     this.createHud();
     this.createHealthBar();
+    this.createNitroGauge();
     if (this.fuelActive) this.createFuelGauge();
     this.createControls();
 
@@ -212,6 +229,7 @@ export class DriveScene extends Phaser.Scene {
       audio.stopEngine();
       audio.stopRain();
       audio.stopSiren();
+      audio.nitroOff();
     });
 
     this.showStartHint();
@@ -222,17 +240,22 @@ export class DriveScene extends Phaser.Scene {
   private createLight(data: LightData): void {
     const x = data.lineX;
     const road = this.add.graphics().setDepth(-4);
-    // stop line
+    // Stop lines: ours across our two lanes (the lower half of the road), the oncoming one,
+    // on the far side of the zebra crossing, across the two oncoming lanes.
     road.fillStyle(C.roadLine, 1);
-    road.fillPoints(
-      [
-        new Phaser.Math.Vector2(x - 6, ROAD_TOP),
-        new Phaser.Math.Vector2(x + 6, ROAD_TOP),
-        new Phaser.Math.Vector2(x - 4, ROAD_BOTTOM),
-        new Phaser.Math.Vector2(x - 16, ROAD_BOTTOM),
-      ],
-      true,
-    );
+    const centre = ROAD_TOP + 66;
+    const stopLine = (lx: number, y0: number, y1: number) =>
+      road.fillPoints(
+        [
+          new Phaser.Math.Vector2(lx - 6 - 12 * ((y0 - ROAD_TOP) / (ROAD_BOTTOM - ROAD_TOP)), y0),
+          new Phaser.Math.Vector2(lx + 6 - 12 * ((y0 - ROAD_TOP) / (ROAD_BOTTOM - ROAD_TOP)), y0),
+          new Phaser.Math.Vector2(lx + 6 - 12 * ((y1 - ROAD_TOP) / (ROAD_BOTTOM - ROAD_TOP)), y1),
+          new Phaser.Math.Vector2(lx - 6 - 12 * ((y1 - ROAD_TOP) / (ROAD_BOTTOM - ROAD_TOP)), y1),
+        ],
+        true,
+      );
+    stopLine(x, centre, ROAD_BOTTOM);
+    stopLine(x + 185, ROAD_TOP, centre - 4);
     // Zebra crossing: the bars run ALONG the road, one behind the other across its width,
     // and people walk over them (bars across the road would be a pattern for cars, not for people).
     road.fillStyle(C.roadLine, 0.92);
@@ -496,7 +519,7 @@ export class DriveScene extends Phaser.Scene {
   }
 
   private createControls(): void {
-    this.brake = new HoldButton(this, 120, GAME_H - 110, 76, C.red, (g, s) => Icons.brake(g, s));
+    this.brake = new HoldButton(this, 100, GAME_H - 84, 44, C.red, (g, s) => Icons.brake(g, s)); // the same size as the nitro button
     this.gas = new HoldButton(this, GAME_W - 120, GAME_H - 110, 76, C.green, (g, s) => Icons.gas(g, s));
     for (const b of [this.brake, this.gas]) b.setScrollFactor(0, 0, true).setDepth(95);
 
@@ -511,11 +534,15 @@ export class DriveScene extends Phaser.Scene {
     });
     horn.setScrollFactor(0, 0, true).setDepth(95);
 
+    // Nitro: hold it for a burst of speed
+    this.nitroBtn = new HoldButton(this, GAME_W - 292 - 112, GAME_H - 84, 44, C.orange, (g, s) => Icons.flame(g, s));
+    this.nitroBtn.setScrollFactor(0, 0, true).setDepth(95);
+
     const kb = this.input.keyboard;
     if (kb) {
       const K = Phaser.Input.Keyboard.KeyCodes;
       this.keys = kb.addKeys({
-        right: K.RIGHT, left: K.LEFT, up: K.UP, down: K.DOWN, d: K.D, a: K.A, w: K.W, s: K.S,
+        right: K.RIGHT, left: K.LEFT, up: K.UP, down: K.DOWN, d: K.D, a: K.A, w: K.W, s: K.S, shift: K.SHIFT, n: K.N,
       }) as DriveScene['keys'];
       kb.on('keydown-ESC', () => this.setPaused(!this.paused));
       kb.on('keydown-P', () => this.setPaused(!this.paused));
@@ -588,6 +615,7 @@ export class DriveScene extends Phaser.Scene {
     if (this.phase === 'ended' || on === this.paused) return;
     this.paused = on;
     if (on) {
+      if (this.boosting) this.setBoosting(false);
       this.tweens.pauseAll();
       this.time.paused = true;
       audio.setEngine(0);
@@ -710,6 +738,97 @@ export class DriveScene extends Phaser.Scene {
     this.mistake(t('tooFast'), POINTS.speedBump, bx);
   }
 
+  // ---------------------------------------------------------------- nitro
+
+  private createNitroGauge(): void {
+    const c = this.add.container(584, 90).setScrollFactor(0).setDepth(90);
+    const panel = this.add.graphics();
+    panel.fillStyle(C.cream, 0.95);
+    panel.fillRoundedRect(0, 0, 214, 34, 14);
+    panel.lineStyle(4, C.ink, 1);
+    panel.strokeRoundedRect(0, 0, 214, 34, 14);
+    const icon = this.add.graphics({ x: 26, y: 17 });
+    Icons.flame(icon, 30, C.ink);
+    this.nitroBar = this.add.graphics();
+    c.add([panel, icon, this.nitroBar]);
+    this.nitroC = c;
+    this.refreshNitroBar();
+  }
+
+  private refreshNitroBar(): void {
+    const shown = Math.round(this.nitro / 2) + (this.nitroLocked ? 1000 : 0); // redraw only when the bar visibly changes
+    if (shown === this.nitroShown) return;
+    this.nitroShown = shown;
+    const w = 142;
+    const k = this.nitro / NITRO.max;
+    const g = this.nitroBar;
+    g.clear();
+    g.fillStyle(0x9a9fa8, 1);
+    g.fillRoundedRect(54, 8, w, 18, 8);
+    g.fillStyle(this.nitroLocked ? 0xb9b0a0 : C.orange, 1);
+    if (k > 0) g.fillRoundedRect(54, 8, Math.max(14, w * k), 18, 8);
+    g.lineStyle(3, C.ink, 1);
+    g.strokeRoundedRect(54, 8, w, 18, 8);
+  }
+
+  /** The boost starts or stops: a whoosh, fire behind the bus, speed lines. */
+  private setBoosting(on: boolean): void {
+    this.boosting = on;
+    if (on) {
+      audio.nitroOn();
+      this.cameras.main.shake(180, 0.004);
+      if (!this.flame) {
+        this.flame = this.add.particles(0, 0, 'dot', {
+          lifespan: 320,
+          speedX: { min: -420, max: -260 },
+          speedY: { min: -50, max: 50 },
+          scale: { start: 1.6, end: 0 },
+          alpha: { start: 0.95, end: 0 },
+          tint: [0xffd23f, 0xf4a261, 0xe63946],
+          blendMode: 'ADD',
+          frequency: 14,
+          quantity: 2,
+          emitting: false,
+        });
+        this.flame.setDepth(11);
+        this.streaks = this.add.particles(GAME_W + 20, 0, 'raindrop', {
+          y: { min: 130, max: 560 },
+          speedX: { min: -1900, max: -1500 },
+          lifespan: 600,
+          rotate: 90,
+          alpha: { start: 0.55, end: 0 },
+          scale: { min: 1, max: 2 },
+          frequency: 22,
+          emitting: false,
+        });
+        this.streaks.setScrollFactor(0).setDepth(85);
+      }
+      this.flame.start();
+      this.streaks?.start();
+    } else {
+      audio.nitroOff();
+      this.flame?.stop();
+      this.streaks?.stop();
+    }
+  }
+
+  private nitroEffects(): void {
+    if (this.boosting && this.flame) {
+      const L = this.bus.layout;
+      // at the height of the rear window: lower down it would hide behind the brake pedal on a touch screen
+      this.flame.setPosition(this.bus.x + L.backX * this.bus.scaleX - 6, GROUND_Y - 95);
+    }
+  }
+
+  /** Nitro as a reward for good driving (a properly served bus stop). */
+  private addNitro(amount: number): void {
+    this.nitro = Math.min(NITRO.max, this.nitro + amount);
+    if (this.nitroLocked && this.nitro >= NITRO.minToStart) this.nitroLocked = false;
+    this.nitroShown = -1;
+    this.refreshNitroBar();
+    this.tweens.add({ targets: this.nitroC, scale: { from: 1.25, to: 1 }, duration: 300, ease: 'Back.easeOut' });
+  }
+
   // ---------------------------------------------------------------- petrol and the gas station
 
   /** A blue zone on the road, two pumps and a sign on the sidewalk: stop here like at a bus stop. */
@@ -765,7 +884,7 @@ export class DriveScene extends Phaser.Scene {
     Icons.pump(icon, 42);
 
     // a warning board far before the station, so the child sees it coming
-    const wx = x1 - 900;
+    const wx = x1 - 1200;
     const board = this.add.graphics().setDepth(20);
     board.fillStyle(0x4a4650, 1);
     board.fillRect(wx - 4, 590, 8, SIDEWALK_FEET_Y + 4 - 590);
@@ -830,10 +949,10 @@ export class DriveScene extends Phaser.Scene {
   }
 
   /** Driving burns petrol: faster and harder pushing on the gas burns more. */
-  private useFuel(dx: number, dt: number, accelerating: boolean): void {
+  private useFuel(dx: number, dt: number, accelerating: boolean, boosting = false): void {
     if (!this.fuelActive || this.phase === 'finishing') return;
     const before = Math.round(this.fuel);
-    this.fuel = Math.max(0, this.fuel - fuelUse(dx, dt, this.v, accelerating));
+    this.fuel = Math.max(0, this.fuel - fuelUse(dx, dt, this.v, accelerating, boosting));
     if (Math.round(this.fuel) !== before) this.refreshFuelBar();
 
     if (this.fuel <= LOW_FUEL && this.fuel > 0 && !this.lowFuelShown) {
@@ -1173,6 +1292,7 @@ export class DriveScene extends Phaser.Scene {
     await this.bus.closeDoors();
     stop.state = 'done';
     this.award(POINTS.stopServed, this.bus.x);
+    this.addNitro(NITRO.stopReward);
     audio.reward();
     this.showBanner(t('wellDone'), C.green, 1400, (g) => drawStar(g, 0, 0, 26, C.yellow, C.ink, 3));
     this.phase = 'driving';
@@ -1200,6 +1320,15 @@ export class DriveScene extends Phaser.Scene {
       brake = true;
     }
 
+    // Nitro: a burst of speed while the button (or Shift / N) is held, never together with the brake.
+    const wantBoost = Boolean(this.nitroBtn.isDown || (k && (k.shift.isDown || k.n.isDown))) && this.phase === 'driving' && !brake;
+    const nit = nitroStep({ nitro: this.nitro, locked: this.nitroLocked }, wantBoost, dt);
+    if (nit.boosting !== this.boosting) this.setBoosting(nit.boosting);
+    this.nitro = nit.nitro;
+    this.nitroLocked = nit.locked;
+    if (nit.boosting) gas = true; // the boost always pushes the gas
+    this.refreshNitroBar();
+
     if (gas && !this.gasTouched) {
       this.gasTouched = true;
       this.startHint?.destroy();
@@ -1208,17 +1337,21 @@ export class DriveScene extends Phaser.Scene {
 
     const perf = performanceFor(this.health);
     const fp = this.fuelActive ? fuelPerformance(this.fuel) : 1; // an empty tank: a crawl
-    const max = this.level.maxSpeed * perf.speedFactor * fp;
+    const maxNormal = this.level.maxSpeed * perf.speedFactor * fp;
+    const max = this.boosting ? maxNormal * NITRO.speedFactor : maxNormal;
+    const vBefore = this.v;
     if (this.phase === 'driving') {
       if (brake) this.v -= PHYSICS.brake * dt;
-      else if (gas) this.v += PHYSICS.accel * perf.accelFactor * fp * dt;
+      else if (gas) this.v += PHYSICS.accel * perf.accelFactor * fp * (this.boosting ? NITRO.accelFactor : 1) * dt;
       else this.v -= PHYSICS.coast * dt;
     } else if (this.phase === 'finishing') {
       this.v = Math.max(this.v, 260);
     } else {
       this.v = 0;
     }
-    this.v = Phaser.Math.Clamp(this.v, 0, max);
+    // We never exceed the limit by pushing; but speed left over from a boost bleeds off smoothly instead of snapping.
+    if (this.v > max) this.v = vBefore > max ? Math.max(max, vBefore - 320 * dt) : max;
+    this.v = Math.max(0, this.v);
 
     const prevFront = this.bus.frontWorldX();
     const prevX = this.bus.x;
@@ -1237,16 +1370,17 @@ export class DriveScene extends Phaser.Scene {
       const res = this.lane.update(dt, cam.scrollX, states, { x: this.bus.x, len: this.bus.lengthWorld(), v: this.v });
       if (res.player) {
         this.bus.x = res.player.x;
-        this.v = Phaser.Math.Clamp(res.player.v, 0, max + 150);
+        this.v = Phaser.Math.Clamp(res.player.v, 0, maxNormal * NITRO.speedFactor + 150);
       }
       res.crashes.forEach((c) => this.onCrash(c));
     }
     const front = this.bus.frontWorldX();
-    this.bus.roll(dx, dt, this.v / max);
-    audio.setEngine(this.v / max);
+    this.bus.roll(dx, dt, Math.min(1.4, this.v / maxNormal));
+    audio.setEngine(Math.min(1.3, this.v / maxNormal));
+    this.nitroEffects();
     this.checkBumps(prevX);
     this.wearEffects(dt);
-    this.useFuel(dx, dt, gas && this.phase === 'driving');
+    this.useFuel(dx, dt, gas && this.phase === 'driving', this.boosting);
 
     // Camera + parallax
     cam.scrollX = Phaser.Math.Clamp(this.bus.x - this.camLead, 0, this.level.length - GAME_W);

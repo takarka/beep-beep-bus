@@ -150,3 +150,38 @@ export function lanePlan(level: number): {
     hastyChance: l >= 5 ? Math.min(0.15 + (l - 5) * 0.03, 0.35) : 0,
   };
 }
+
+// ------------------------------------------------------------------ overtaking in our two lanes
+
+/** What the lane-change logic needs to know about a vehicle (or our bus): centre x, length, speed. */
+export interface LaneBody {
+  x: number;
+  len: number;
+  v: number;
+}
+
+/**
+ * Can `me` safely be in a lane that holds `others`? A vehicle ahead needs room to brake (more when
+ * we are faster than it), a vehicle behind needs room not to run into us (more when it is faster).
+ */
+export function laneClear(me: LaneBody, others: readonly LaneBody[], ahead = 110, behind = 150): boolean {
+  for (const o of others) {
+    if (o.x >= me.x) {
+      const gap = o.x - o.len / 2 - (me.x + me.len / 2);
+      if (gap < ahead + Math.max(0, me.v - o.v)) return false;
+    } else {
+      const gap = me.x - me.len / 2 - (o.x + o.len / 2);
+      if (gap < behind + Math.max(0, o.v - me.v)) return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * A driver stuck behind a slower vehicle wants to go round it: the vehicle in front is clearly slower
+ * than what he would like to drive, and close enough to be in the way.
+ */
+export function wantsToOvertake(cruise: number, v: number, leader: { gap: number; v: number } | null): boolean {
+  if (!leader) return false;
+  return leader.v + 20 < cruise && leader.gap < 260 + v * 0.5;
+}
