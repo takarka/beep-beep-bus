@@ -6,7 +6,7 @@ import { GAME_W } from '../config';
 import { mulberry32, pick, randInt, randRange, type Rng } from '../core/rng';
 import type { LightState } from '../core/traffic';
 import { DRIVERS, bumpZones, laneClear, lanePlan, nextSpeed, targetSpeed, wantsToOvertake, type Driver } from './ai';
-import { LANE_CHANGE_TIME, LANE_Y } from './lanes';
+import { LANE_CHANGE_TIME, LANE_Y, laneY, occupiesLane, type LaneIndex } from './lanes';
 import { resolveLane, type Body } from './collision';
 import { depthForY } from './Crossing';
 import { CAR_COLORS, MINIBUS_COLORS, VehicleView } from './VehicleView';
@@ -61,11 +61,16 @@ export interface PlayerBody {
   x: number;
   len: number;
   v: number;
+  lane?: LaneIndex;
+  fromLane?: LaneIndex;
+  changeT?: number;
 }
 
 export interface LaneCrash {
   /** World x where they touched. */
   x: number;
+  /** Road y of the lane where the crash happened. */
+  y: number;
   impact: number;
   /** 'follower': our bus ran into somebody. 'leader': somebody ran into our bus. */
   player: 'follower' | 'leader' | null;
@@ -110,12 +115,14 @@ export class LaneTraffic {
     this.spawn(playerX + 1100 + this.rng() * 500);
   }
 
-  /** The nearest vehicle in front of x: the gap to its rear and its speed. */
-  leaderAhead(frontX: number): { gap: number; v: number } | null {
+  /** The nearest vehicle in front of x in the lane(s) our bus occupies: the gap to its rear and its speed. */
+  leaderAhead(frontX: number, lane: LaneIndex = 0, fromLane: LaneIndex = lane, changeT = 0): { gap: number; v: number } | null {
+    const me = { lane, fromLane, changeT };
     let best: LaneVehicle | null = null;
     for (const v of this.vehicles) {
       if (v.leaving || v.x - v.len / 2 < frontX - 5) continue;
-      if (!(v.lane === 0 || (v.changeT > 0 && v.fromLane === 0))) continue; // the passing lane is not in our way
+      const shares = ([0, 1] as const).some((l) => occupiesLane(me, l) && occupiesLane(v, l));
+      if (!shares) continue;
       if (!best || v.x < best.x) best = v;
     }
     return best ? { gap: best.x - best.len / 2 - frontX, v: best.v } : null;
@@ -189,12 +196,15 @@ export class LaneTraffic {
 
     const solid = this.vehicles.filter((v) => !v.leaving);
     // A vehicle that is changing lanes blocks both lanes until it has finished.
-    const occupies = (v: LaneVehicle, lane: 0 | 1): boolean => v.lane === lane || (v.changeT > 0 && v.fromLane === lane);
+    const occupiesPlayer = (p: PlayerBody, lane: LaneIndex): boolean => {
+      const pLane = p.lane ?? 0;
+      return occupiesLane({ lane: pLane, fromLane: p.fromLane ?? pLane, changeT: p.changeT ?? 0 }, lane);
+    };
     type Ent = { x: number; len: number; v: number; ref: LaneVehicle | null };
     const ents: Ent[] = solid.map((v) => ({ x: v.x, len: v.len, v: v.v, ref: v }));
     const playerEnt: Ent | null = player ? { x: player.x, len: player.len, v: player.v, ref: null } : null;
-    const laneEnts = (lane: 0 | 1): Ent[] =>
-      [...ents.filter((e) => occupies(e.ref!, lane)), ...(playerEnt && lane === 0 ? [playerEnt] : [])].sort((a, b) => a.x - b.x);
+    const laneEnts = (lane: LaneIndex): Ent[] =>
+      [...ents.filter((e) => occupiesLane(e.ref!, lane)), ...(playerEnt && player && occupiesPlayer(player, lane) ? [playerEnt] : [])].sort((a, b) => a.x - b.x);
     const lists: [Ent[], Ent[]] = [laneEnts(0), laneEnts(1)];
 
     for (const e of ents) {
@@ -203,7 +213,7 @@ export class LaneTraffic {
       // the nearest vehicle ahead, in whichever lane(s) this one occupies
       let leader: Ent | null = null;
       for (const lane of [0, 1] as const) {
-        if (!occupies(veh, lane)) continue;
+        if (!occupiesLane(veh, lane)) continue;
         const list = lists[lane];
         const next = list[list.indexOf(e) + 1];
         if (next && (!leader || next.x < leader.x)) leader = next;
@@ -244,11 +254,12 @@ export class LaneTraffic {
       v.life -= dx;
       v.view.setX(v.x);
       if (!v.leaving) {
-        const targetY = v.lane === 0 ? LANE_Y.main : LANE_Y.passing;
+        const targetY = laneY(v.lane);
         v.view.setY(v.y - v.hop);
         v.view.setDepth(depthForY(v.y));
         v.view.setAngle(Phaser.Math.Clamp((targetY - v.y) / 32, -1, 1) * 3); // the nose points where it is going
       }
+      v.view.setBlinker(v.changeT > 0 || v.leaving, this.scene.time.now);
       if (v.view instanceof BusView) v.view.roll(dx, dt, Math.min(1, v.v / 260));
       else v.view.roll(dx, v.scale);
     }
@@ -259,14 +270,17 @@ export class LaneTraffic {
     if (player) bodyOf.set(null, { x: player.x, len: player.len, v: player.v });
     const crashes: LaneCrash[] = [];
     for (const lane of [0, 1] as const) {
-      const members: Array<LaneVehicle | null> = [...solid.filter((v) => occupies(v, lane)), ...(player && lane === 0 ? [null] : [])];
+      const members: Array<LaneVehicle | null> = [
+        ...solid.filter((v) => occupiesLane(v, lane)),
+        ...(player && occupiesPlayer(player, lane) ? [null] : []),
+      ];
       const hits = resolveLane(members.map((m) => bodyOf.get(m)!));
       for (const h of hits) {
         const f = members[h.follower] ?? null;
         const l = members[h.leader] ?? null;
         for (const veh of [f, l]) if (veh) veh.stall = Math.max(veh.stall, STALL);
         const lb = bodyOf.get(l)!;
-        crashes.push({ x: lb.x - lb.len / 2, impact: h.impact, player: f === null ? 'follower' : l === null ? 'leader' : null });
+        crashes.push({ x: lb.x - lb.len / 2, y: laneY(lane), impact: h.impact, player: f === null ? 'follower' : l === null ? 'leader' : null });
       }
     }
     for (const v of solid) {
@@ -321,9 +335,13 @@ export class LaneTraffic {
 
   /** A hasty driver right behind us gets a red "!" so a child can see that braking hard is risky. */
   private warnHasty(player: PlayerBody | null): void {
+    const pLane = player?.lane ?? 0;
+    const pFrom = player?.fromLane ?? pLane;
+    const pChangeT = player?.changeT ?? 0;
     for (const v of this.vehicles) {
       if (!(v.view instanceof VehicleView)) continue;
-      const behind = player !== null && v.lane === 0 && v.changeT <= 0 && v.x < player.x && player.x - player.len / 2 - (v.x + v.len / 2) < 380;
+      const sameLane = player !== null && occupiesLane({ lane: pLane, fromLane: pFrom, changeT: pChangeT }, v.lane);
+      const behind = sameLane && v.changeT <= 0 && v.x < player!.x && player!.x - player!.len / 2 - (v.x + v.len / 2) < 380;
       v.view.setHasty(v.driver === 'hasty' && behind && !v.leaving);
     }
   }

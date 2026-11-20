@@ -30,7 +30,8 @@ import { drawLandmarkBig } from '../ui/landmarkScenes';
 import { TrafficManager } from '../traffic/TrafficManager';
 import { BUMP, LOW_FUEL, MAX_FUEL, MAX_HEALTH, NITRO, bumpDamage, bumpResult, conditionOf, crashDamage, fuelPerformance, fuelUse, nitroStep, performanceFor, repairPlan } from '../core/rules';
 import { LaneTraffic, type LaneCrash } from '../traffic/LaneTraffic';
-import { Crossing } from '../traffic/Crossing';
+import { Crossing, depthForY } from '../traffic/Crossing';
+import { createLaneMotion, startLaneChange, stepLaneChange, type LaneIndex, type LaneMotion } from '../traffic/lanes';
 import { precipKind, resolveEnv } from '../core/world';
 import { Button, HoldButton, floatText, label } from '../ui/widgets';
 import { addAudioToggles } from './MenuScene';
@@ -47,6 +48,7 @@ interface StopRt {
   people: Phaser.GameObjects.Image[];
   arrow: Phaser.GameObjects.Container;
   announced: boolean;
+  laneHinted?: boolean;
   last: boolean;
 }
 
@@ -123,6 +125,9 @@ export class DriveScene extends Phaser.Scene {
   private nitroLocked = false;
   private boosting = false;
   private nitroBtn!: HoldButton;
+  private laneBtn!: Button;
+  private busLane: LaneMotion = createLaneMotion(0);
+  private lastBlinkerPhase = -1;
   private nitroC!: Phaser.GameObjects.Container;
   private nitroBar!: G;
   private nitroShown = -1;
@@ -140,7 +145,7 @@ export class DriveScene extends Phaser.Scene {
 
   private gas!: HoldButton;
   private brake!: HoldButton;
-  private keys!: Record<'right' | 'left' | 'up' | 'down' | 'd' | 'a' | 'w' | 's' | 'shift' | 'n', Phaser.Input.Keyboard.Key>;
+  private keys!: Record<'right' | 'left' | 'd' | 'a' | 'shift' | 'n', Phaser.Input.Keyboard.Key>;
   private scoreText!: Phaser.GameObjects.Text;
   private paxText!: Phaser.GameObjects.Text;
   private progressBus!: G;
@@ -183,6 +188,8 @@ export class DriveScene extends Phaser.Scene {
     this.nitroLocked = false;
     this.boosting = false;
     this.nitroShown = -1;
+    this.busLane = createLaneMotion(0);
+    this.lastBlinkerPhase = -1;
     this.flame = null;
     this.streaks = null;
     this.banner = null;
@@ -534,6 +541,16 @@ export class DriveScene extends Phaser.Scene {
     });
     horn.setScrollFactor(0, 0, true).setDepth(95);
 
+    // Lane change: tap to switch between the main lane and the passing lane
+    this.laneBtn = new Button(this, 212, GAME_H - 84, {
+      r: 44,
+      color: C.blue,
+      icon: (g, s) => Icons.laneChange(g, s, true),
+      onDown: () => this.requestLane(this.busLane.lane === 0 ? 1 : 0),
+      onClick: () => undefined,
+    });
+    this.laneBtn.setScrollFactor(0, 0, true).setDepth(95);
+
     // Nitro: hold it for a burst of speed
     this.nitroBtn = new HoldButton(this, GAME_W - 292 - 112, GAME_H - 84, 44, C.orange, (g, s) => Icons.flame(g, s));
     this.nitroBtn.setScrollFactor(0, 0, true).setDepth(95);
@@ -542,14 +559,32 @@ export class DriveScene extends Phaser.Scene {
     if (kb) {
       const K = Phaser.Input.Keyboard.KeyCodes;
       this.keys = kb.addKeys({
-        right: K.RIGHT, left: K.LEFT, up: K.UP, down: K.DOWN, d: K.D, a: K.A, w: K.W, s: K.S, shift: K.SHIFT, n: K.N,
+        right: K.RIGHT, left: K.LEFT, d: K.D, a: K.A, shift: K.SHIFT, n: K.N,
       }) as DriveScene['keys'];
       kb.on('keydown-ESC', () => this.setPaused(!this.paused));
       kb.on('keydown-P', () => this.setPaused(!this.paused));
       kb.on('keydown-H', () => this.honk());
       kb.on('keydown-SPACE', () => this.honk());
+      kb.on('keydown-UP', () => this.requestLane(1));
+      kb.on('keydown-W', () => this.requestLane(1));
+      kb.on('keydown-DOWN', () => this.requestLane(0));
+      kb.on('keydown-S', () => this.requestLane(0));
       kb.addCapture('SPACE'); // never scroll the page
+      kb.addCapture('UP');
+      kb.addCapture('DOWN');
     }
+  }
+
+  private requestLane(to: LaneIndex): void {
+    if (this.paused || this.phase !== 'driving' || this.stun > 0) return;
+    if (startLaneChange(this.busLane, to)) {
+      this.lastBlinkerPhase = -1;
+      this.refreshLaneBtn();
+    }
+  }
+
+  private refreshLaneBtn(): void {
+    this.laneBtn.setIcon((g, s) => Icons.laneChange(g, s, this.busLane.lane === 0));
   }
 
   private honk(): void {
@@ -816,7 +851,7 @@ export class DriveScene extends Phaser.Scene {
     if (this.boosting && this.flame) {
       const L = this.bus.layout;
       // at the height of the rear window: lower down it would hide behind the brake pedal on a touch screen
-      this.flame.setPosition(this.bus.x + L.backX * this.bus.scaleX - 6, GROUND_Y - 95);
+      this.flame.setPosition(this.bus.x + L.backX * this.bus.scaleX - 6, this.busLane.y - 95);
     }
   }
 
@@ -1000,10 +1035,12 @@ export class DriveScene extends Phaser.Scene {
         continue;
       }
       if (this.phase === 'driving' && isInStopZone(front, z) && this.v < 3 && !gas) {
-        this.stillTimeSt += dt;
-        if (this.stillTimeSt > 0.25) {
-          this.stillTimeSt = 0;
-          void this.serveStation(s);
+        if (this.busLane.lane === 0 && this.busLane.changeT <= 0) {
+          this.stillTimeSt += dt;
+          if (this.stillTimeSt > 0.25) {
+            this.stillTimeSt = 0;
+            void this.serveStation(s);
+          }
         }
       } else if (isInStopZone(front, z)) {
         this.stillTimeSt = 0;
@@ -1167,7 +1204,7 @@ export class DriveScene extends Phaser.Scene {
   private wearEffects(dt: number): void {
     if (this.smoke) {
       const L = this.bus.layout;
-      this.smoke.setPosition(this.bus.x + (L.boxFrontX - 70) * this.bus.scaleX, GROUND_Y + (L.top + 18) * this.bus.scaleX);
+      this.smoke.setPosition(this.bus.x + (L.boxFrontX - 70) * this.bus.scaleX, this.busLane.y + (L.top + 18) * this.bus.scaleX);
     }
     if (this.health < 40 && this.v > 30) {
       this.coughTimer -= dt;
@@ -1188,7 +1225,7 @@ export class DriveScene extends Phaser.Scene {
       this.crashCooldown = 2.5;
       this.stun = 1.1;
       audio.crash();
-      this.sparks(c.x);
+      this.sparks(c.x, c.y);
       this.damageBus(crashDamage(c.impact, true));
       this.mistake(t('crash'), POINTS.crash, this.bus.x);
     } else if (c.player === 'leader') {
@@ -1196,18 +1233,18 @@ export class DriveScene extends Phaser.Scene {
       if (this.crashCooldown > 0) return;
       this.crashCooldown = 1.5;
       audio.crash();
-      this.sparks(c.x);
+      this.sparks(c.x, c.y);
       cam.shake(300, 0.012);
       this.damageBus(crashDamage(c.impact, false));
       this.showBanner(t('bumped'), C.orange, 1800);
     } else if (visible) {
       audio.crash();
-      this.sparks(c.x);
+      this.sparks(c.x, c.y);
     }
   }
 
-  private sparks(worldX: number): void {
-    const em = this.add.particles(worldX, GROUND_Y - 70, 'dot', {
+  private sparks(worldX: number, roadY = this.busLane.y): void {
+    const em = this.add.particles(worldX, roadY - 70, 'dot', {
       speed: { min: 90, max: 340 },
       lifespan: 520,
       scale: { start: 0.8, end: 0 },
@@ -1304,13 +1341,24 @@ export class DriveScene extends Phaser.Scene {
     if (this.paused || this.phase === 'ended') return;
     const dt = Math.min(delta / 1000, 0.05);
     const k = this.keys;
-    let gas = Boolean(this.gas.isDown || (k && (k.right.isDown || k.up.isDown || k.d.isDown || k.w.isDown)));
-    let brake = Boolean(this.brake.isDown || (k && (k.left.isDown || k.down.isDown || k.a.isDown || k.s.isDown)));
+    let gas = Boolean(this.gas.isDown || (k && (k.right.isDown || k.d.isDown)));
+    let brake = Boolean(this.brake.isDown || (k && (k.left.isDown || k.a.isDown)));
 
-    // "Helper" mode: the bus brakes by itself before red lights and bus stops.
-    if (this.assist && this.phase === 'driving' && this.autoBrakeNeeded(this.bus.frontWorldX())) {
-      gas = false;
-      brake = true;
+    // "Helper" mode: the bus brakes by itself before red lights and bus stops, and pulls back to the curb lane for stops.
+    if (this.assist && this.phase === 'driving') {
+      const f0 = this.bus.frontWorldX();
+      if (this.busLane.lane === 1) {
+        const stopSoon = this.stops.some((s) => s.state === 'waiting' && s.data.zoneEnd - f0 > -40 && s.data.zoneEnd - f0 < 750);
+        const stSoon =
+          this.fuelActive &&
+          (this.fuel < 45 || this.health < 60) &&
+          this.stations.some((st) => st.state === 'waiting' && st.zoneEnd - f0 > -40 && st.zoneEnd - f0 < 750);
+        if (stopSoon || stSoon) this.requestLane(0);
+      }
+      if (this.autoBrakeNeeded(f0)) {
+        gas = false;
+        brake = true;
+      }
     }
 
     // Shaken after a crash: no gas for a moment.
@@ -1357,6 +1405,20 @@ export class DriveScene extends Phaser.Scene {
     const prevX = this.bus.x;
     const dx = this.v * dt;
     this.bus.x += dx;
+    const steerAngle = stepLaneChange(this.busLane, dt);
+    this.bus.setRoadPose(this.busLane.y, steerAngle);
+    this.bus.setDepth(depthForY(this.busLane.y));
+    const blinking = this.busLane.changeT > 0;
+    this.bus.setBlinker(blinking, this.time.now);
+    if (blinking) {
+      const phase = Math.floor(this.time.now / 220) % 2;
+      if (phase !== this.lastBlinkerPhase) {
+        this.lastBlinkerPhase = phase;
+        audio.blinker(phase === 0);
+      }
+    } else {
+      this.lastBlinkerPhase = -1;
+    }
     const cam = this.cameras.main;
 
     // Other road users. A red light also holds them while people are crossing.
@@ -1366,8 +1428,15 @@ export class DriveScene extends Phaser.Scene {
       state: l.crossing.busy ? ('red' as LightState) : l.model.state,
     }));
     if (this.phase !== 'finishing') {
-      // Traffic in our own lane is solid: we can't drive through it, and it may run into us.
-      const res = this.lane.update(dt, cam.scrollX, states, { x: this.bus.x, len: this.bus.lengthWorld(), v: this.v });
+      // Traffic in our direction is solid: we can't drive through it, and it may run into us.
+      const res = this.lane.update(dt, cam.scrollX, states, {
+        x: this.bus.x,
+        len: this.bus.lengthWorld(),
+        v: this.v,
+        lane: this.busLane.lane,
+        fromLane: this.busLane.fromLane,
+        changeT: this.busLane.changeT,
+      });
       if (res.player) {
         this.bus.x = res.player.x;
         this.v = Phaser.Math.Clamp(res.player.v, 0, maxNormal * NITRO.speedFactor + 150);
@@ -1425,8 +1494,8 @@ export class DriveScene extends Phaser.Scene {
       if (dist < -10 || dist > 700) continue;
       if (this.v > Math.sqrt((BUMP.gentle - 15) ** 2 + 2 * PHYSICS.brake * Math.max(0, dist - 20))) return true;
     }
-    // A vehicle in front of us: keep behind it, gently.
-    const lead = this.lane.leaderAhead(front);
+    // A vehicle in front of us in the lane(s) we occupy: keep behind it, gently.
+    const lead = this.lane.leaderAhead(front, this.busLane.lane, this.busLane.fromLane, this.busLane.changeT);
     if (lead && lead.gap <= 70 + Math.max(0, this.v - lead.v) * 0.7) return true;
     return false;
   }
@@ -1501,10 +1570,15 @@ export class DriveScene extends Phaser.Scene {
         continue;
       }
       if (this.phase === 'driving' && isInStopZone(front, z) && this.v < 3 && !gas) {
-        this.stillTime += dt;
-        if (this.stillTime > 0.25) {
-          this.stillTime = 0;
-          void this.serveStop(s);
+        if (this.busLane.lane === 0 && this.busLane.changeT <= 0) {
+          this.stillTime += dt;
+          if (this.stillTime > 0.25) {
+            this.stillTime = 0;
+            void this.serveStop(s);
+          }
+        } else if (!s.laneHinted) {
+          s.laneHinted = true;
+          this.showBanner(t('returnLane'), C.blue, 1800, (g) => Icons.laneChange(g, 38, false));
         }
       } else if (isInStopZone(front, z)) {
         this.stillTime = 0;
@@ -1514,6 +1588,7 @@ export class DriveScene extends Phaser.Scene {
 
   private finishRoute(): void {
     this.phase = 'finishing';
+    if (startLaneChange(this.busLane, 0)) this.refreshLaneBtn();
     this.lane.clear();
     this.gas.reset();
     this.brake.reset();

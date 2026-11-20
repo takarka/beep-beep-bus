@@ -219,6 +219,18 @@ export const Icons = {
     g.fillStyle(C.orange, 1);
     g.fillCircle(0, s * 0.18, s * 0.11);
   },
+  /** Lane-change arrow (up to the passing lane, or down back to the main lane). */
+  laneChange(g: G, s: number, up = true, color: number = C.cream) {
+    const dir = up ? -1 : 1;
+    // dashed lane divider across the middle
+    g.fillStyle(color, 0.5);
+    g.fillRoundedRect(-s * 0.36, -s * 0.03, s * 0.18, s * 0.06, s * 0.02);
+    g.fillRoundedRect(s * 0.18, -s * 0.03, s * 0.18, s * 0.06, s * 0.02);
+    // bold arrow pointing to the target lane
+    g.fillStyle(color, 1);
+    g.fillRoundedRect(-s * 0.09, up ? -s * 0.06 : -s * 0.34, s * 0.18, s * 0.4, s * 0.05);
+    g.fillTriangle(0, dir * s * 0.38, -s * 0.26, dir * s * 0.04, s * 0.26, dir * s * 0.04);
+  },
   /** A fuel pump: the sign of the gas station. */
   pump(g: G, s: number, color: number = C.cream) {
     g.fillStyle(color, 1);

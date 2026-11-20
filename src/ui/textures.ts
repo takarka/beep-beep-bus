@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { C, GAME_W, mix, shade } from '../config';
 import { mulberry32, pick, randInt } from '../core/rng';
 import { envKey, paletteFor, type Env, type Palette } from '../core/world';
+import { LANE_Y } from '../traffic/lanes';
 
 /**
  * All scenery is generated once at boot into textures, then used as
@@ -9,7 +10,7 @@ import { envKey, paletteFor, type Env, type Palette } from '../core/world';
  */
 
 export const STREET_Y = 440; // top of the street texture on screen
-export const GROUND_Y = 598; // where bus wheels touch the road
+export const GROUND_Y = LANE_Y.main; // where bus wheels touch the road
 export const SIDEWALK_FEET_Y = 700; // where passengers stand on the near sidewalk
 export const PASSENGER_VARIANTS = 8;
 

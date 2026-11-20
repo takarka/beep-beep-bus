@@ -23,6 +23,8 @@ export class VehicleView extends Phaser.GameObjects.Container {
   private lamps: G | null = null;
   private lastPhase = -1;
   private badge: G | null = null;
+  private blinkerG: G;
+  private blinkerKey = -1;
 
   constructor(scene: Phaser.Scene, readonly kind: VehicleKind, color: number, variant: number, night: boolean) {
     super(scene, 0, 0);
@@ -35,6 +37,8 @@ export class VehicleView extends Phaser.GameObjects.Container {
     if (kind === 'minibus') this.buildMinibus(color);
     else this.buildCar(color, variant, kind === 'police');
     if (night) this.addHeadlightBeam(kind === 'minibus' ? 114 : 76, -30);
+    this.blinkerG = scene.add.graphics();
+    this.add(this.blinkerG);
   }
 
   private addWheel(x: number, r: number): void {
@@ -199,6 +203,29 @@ export class VehicleView extends Phaser.GameObjects.Container {
       this.add(g);
     }
     this.badge?.setVisible(on);
+  }
+
+  /** Flashing amber turn signals (front and rear) while changing lanes or turning off. */
+  setBlinker(on: boolean, timeMs: number): void {
+    const lit = on && Math.floor(timeMs / 220) % 2 === 0;
+    const key = on ? (lit ? 2 : 1) : 0;
+    if (key === this.blinkerKey) return;
+    this.blinkerKey = key;
+    const g = this.blinkerG;
+    g.clear();
+    if (!lit) return;
+    const pts: Array<[number, number]> =
+      this.kind === 'minibus'
+        ? [[111, -48], [-114, -56]]
+        : [[71, -22], [-74, -22]];
+    for (const [bx, by] of pts) {
+      g.fillStyle(0xffb703, 0.4);
+      g.fillCircle(bx, by, 13);
+      g.fillStyle(0xffb703, 1);
+      g.lineStyle(2.5, C.ink, 1);
+      g.fillRoundedRect(bx - 5, by - 4, 10, 8, 3);
+      g.strokeRoundedRect(bx - 5, by - 4, 10, 8, 3);
+    }
   }
 
   /** Spin the wheels for `dist` world px of travel. */

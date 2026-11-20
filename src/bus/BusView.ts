@@ -107,7 +107,10 @@ export class BusView extends Phaser.GameObjects.Container {
   private damageG: G | null = null;
   /** 0 = like new, 1 = wrecked. */
   private damage = 0;
-  private joltBase = 0;
+  private hopY = 0;
+  private tiltA = 0;
+  private blinkerG: G | null = null;
+  private blinkerKey = -1;
 
   constructor(scene: Phaser.Scene, x: number, y: number, design: BusDesign) {
     super(scene, x, y);
@@ -120,6 +123,7 @@ export class BusView extends Phaser.GameObjects.Container {
     this.removeAll(true);
     this.wheels = [];
     this.leaves = [];
+    this.blinkerKey = -1;
     this.build();
     this.setPassengers(this.passengers);
   }
@@ -205,22 +209,52 @@ export class BusView extends Phaser.GameObjects.Container {
     }
   }
 
+  /** Positions the bus on the road, composing its lane height & steering tilt with any speed-bump jolt. */
+  setRoadPose(y: number, steerAngle = 0): void {
+    this.setY(y - this.hopY);
+    this.setAngle(steerAngle + this.tiltA);
+  }
+
+  /** Flashing amber turn signals (front and rear) while changing lanes. */
+  setBlinker(on: boolean, timeMs: number): void {
+    const g = this.blinkerG;
+    if (!g) return;
+    const lit = on && Math.floor(timeMs / 220) % 2 === 0;
+    const key = on ? (lit ? 2 : 1) : 0;
+    if (key === this.blinkerKey) return;
+    this.blinkerKey = key;
+    g.clear();
+    if (!lit) return;
+    const L = this.layout;
+    const pts: Array<[number, number]> = [
+      [L.frontX - 10, L.headlight.y - 20],
+      [L.backX + 4, L.taillight.y - 18],
+    ];
+    for (const [bx, by] of pts) {
+      g.fillStyle(0xffb703, 0.38);
+      g.fillCircle(bx, by, 18);
+      g.fillStyle(0xffb703, 1);
+      g.lineStyle(3, C.ink, 1);
+      g.fillRoundedRect(bx - 6, by - 5, 12, 10, 4);
+      g.strokeRoundedRect(bx - 6, by - 5, 12, 10, 4);
+    }
+  }
+
   /** Shaken by a speed bump: the front lifts, then the rear, then the bus settles. `power` is 0..1. */
   jolt(power: number): void {
     if (this.joltTween) {
       this.joltTween.stop();
-      this.setPosition(this.x, this.joltBase).setAngle(0);
+      this.hopY = 0;
+      this.tiltA = 0;
     }
-    this.joltBase = this.y;
     const hop = 5 + 24 * power;
     const tilt = 1.2 + 3.4 * power;
-    const base = this.joltBase;
     this.joltTween = this.scene.tweens.chain({
       targets: this,
       tweens: [
-        { y: base - hop * 0.5, angle: -tilt, duration: 90, ease: 'Quad.easeOut' },
-        { y: base - hop, angle: tilt * 0.8, duration: 110 + 60 * power, ease: 'Sine.easeInOut' },
-        { y: base, angle: 0, duration: 180 + 140 * power, ease: 'Bounce.easeOut' },
+        { hopY: hop * 0.5, tiltA: -tilt, duration: 90, ease: 'Quad.easeOut' },
+        { hopY: hop, tiltA: tilt * 0.8, duration: 110 + 60 * power, ease: 'Sine.easeInOut' },
+        { hopY: 0, tiltA: 0, duration: 180 + 140 * power, ease: 'Bounce.easeOut' },
       ],
     });
     this.joltTween.once('complete', () => {
@@ -535,6 +569,10 @@ export class BusView extends Phaser.GameObjects.Container {
     this.damageG = new Phaser.GameObjects.Graphics(scene);
     this.bodyC.add(this.damageG);
     this.drawDamage();
+
+    // Amber turn signals (blink while changing lanes)
+    this.blinkerG = new Phaser.GameObjects.Graphics(scene);
+    this.bodyC.add(this.blinkerG);
 
     // Wheel arches
     g3.fillStyle(0x1f1c24, 1);
