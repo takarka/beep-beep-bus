@@ -2,10 +2,11 @@ import Phaser from 'phaser';
 import { audio } from '../audio/AudioEngine';
 import { BusView } from '../bus/BusView';
 import { DEFAULT_DESIGN } from '../bus/design';
-import { loadDesign } from '../bus/garage';
+import { loadBusStatus, loadDesign } from '../bus/garage';
 import { BODY_SIZE } from '../bus/geometry';
 import { C, GAME_H, GAME_W, hex } from '../config';
 import { LEVEL_COUNT, MAP_NODES, type MapNode } from '../core/campaign';
+import { LOW_FUEL, MAX_FUEL, MAX_HEALTH } from '../core/rules';
 import {
   completedCount,
   isCompleted,
@@ -338,6 +339,29 @@ export class MapScene extends Phaser.Scene {
     const check = this.add.graphics({ x: 192, y: 131 }).setDepth(41);
     Icons.check(check, 30);
     this.countText = this.add.text(220, 131, `${done}/${LEVEL_COUNT}`, { fontFamily: 'Rubik, sans-serif', fontStyle: '800', fontSize: '28px', color: hex(C.ink) }).setOrigin(0, 0.5).setDepth(41);
+
+    // Current bus condition & petrol (carries over between levels)
+    const st = loadBusStatus();
+    const sp = this.add.graphics().setDepth(40);
+    sp.fillStyle(C.cream, 0.96);
+    sp.fillRoundedRect(20, 168, 290, 38, 14);
+    sp.lineStyle(4, C.ink, 1);
+    sp.strokeRoundedRect(20, 168, 290, 38, 14);
+    const miniBar = (x: number, k: number, fill: number, icon: (g: G) => void) => {
+      const ig = this.add.graphics({ x: x + 16, y: 187 }).setDepth(41);
+      icon(ig);
+      const bw = 90;
+      sp.fillStyle(0x9a9fa8, 1);
+      sp.fillRoundedRect(x + 34, 179, bw, 16, 7);
+      sp.fillStyle(fill, 1);
+      if (k > 0) sp.fillRoundedRect(x + 34, 179, Math.max(12, bw * k), 16, 7);
+      sp.lineStyle(3, C.ink, 1);
+      sp.strokeRoundedRect(x + 34, 179, bw, 16, 7);
+    };
+    const hk = st.health / MAX_HEALTH;
+    const fk = st.fuel / MAX_FUEL;
+    miniBar(26, hk, hk >= 0.6 ? C.green : hk >= 0.3 ? C.yellow : C.red, (g) => Icons.wrench(g, 24, C.ink));
+    miniBar(166, fk, st.fuel <= LOW_FUEL ? C.red : fk >= 0.5 ? 0x3a86ff : C.yellow, (g) => Icons.pump(g, 24, C.ink));
   }
 
   private createBus(p: Progress, cel: number): void {
@@ -346,6 +370,7 @@ export class MapScene extends Phaser.Scene {
     const at = restPoint((cel || p.level) - 1);
     this.bus = new BusView(this, at.x, at.y + BUS_ON_ROAD, design);
     this.bus.setScale(this.busScale).setDepth(30);
+    this.bus.setDamage(1 - loadBusStatus().health / MAX_HEALTH);
     this.bus.setPassengers(2);
     this.tweens.add({ targets: this.bus, y: this.bus.y - 5, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
   }

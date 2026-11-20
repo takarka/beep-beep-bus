@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { audio } from '../audio/AudioEngine';
 import { BusView } from '../bus/BusView';
 import { DEFAULT_DESIGN } from '../bus/design';
-import { loadDesign } from '../bus/garage';
+import { loadBusStatus, loadDesign, saveBusStatus } from '../bus/garage';
 import { DRIVE_SCALE } from '../bus/geometry';
 import { getSettings, updateSettings } from '../core/settings';
 import { C, GAME_H, GAME_W } from '../config';
@@ -83,6 +83,9 @@ export interface DriveResult {
   passengers: number;
   /** Condition of the bus at the end, 0..100. */
   health: number;
+  /** Remaining petrol at the end, 0..100. */
+  fuel?: number;
+  fuelActive?: boolean;
 }
 
 export class DriveScene extends Phaser.Scene {
@@ -173,13 +176,14 @@ export class DriveScene extends Phaser.Scene {
     this.stun = 0;
     this.crashCooldown = 0;
     this.bumpsDone = new Set<number>();
-    this.health = MAX_HEALTH;
+    const status = loadBusStatus();
+    this.health = status.health;
     this.smoke = null;
     this.smokeLevel = 0;
     this.coughTimer = 4;
-    this.fuel = MAX_FUEL;
     this.fuelActive = this.level.level >= 2;
-    this.lowFuelShown = false;
+    this.fuel = this.fuelActive ? status.fuel : MAX_FUEL;
+    this.lowFuelShown = this.fuelActive && this.fuel <= LOW_FUEL;
     this.emptyShown = false;
     this.emptyTimer = 0;
     this.stations = [];
@@ -208,6 +212,8 @@ export class DriveScene extends Phaser.Scene {
     this.bus.setScale(DRIVE_SCALE[design.body]).setDepth(10);
     this.camLead = 140 + this.bus.lengthWorld() / 2;
     this.bus.setNight(env.time === 'night');
+    this.bus.setDamage(1 - this.health / MAX_HEALTH);
+    this.updateSmoke();
     this.traffic = new TrafficManager(this, { night: env.time === 'night', level: this.level.level, bumps: this.level.bumps });
     this.traffic.prewarm(Phaser.Math.Clamp(START_X - this.camLead, 0, this.level.length - GAME_W));
     this.lane = new LaneTraffic(this, { night: env.time === 'night', level: this.level.level, bumps: this.level.bumps });
@@ -1601,6 +1607,10 @@ export class DriveScene extends Phaser.Scene {
     this.time.delayedCall(1300, () => {
       this.phase = 'ended';
       audio.stopEngine();
+      // Carry over the bus's wear and petrol to the next route (only on completed routes).
+      const health = Math.round(this.health);
+      const fuel = Math.round(this.fuel);
+      saveBusStatus(this.fuelActive ? { health, fuel } : { health });
       this.cameras.main.fadeOut(400, 45, 42, 50);
       this.cameras.main.once('camerafadeoutcomplete', () => {
         const result: DriveResult = {
@@ -1608,7 +1618,9 @@ export class DriveScene extends Phaser.Scene {
           score: this.score.score,
           mistakes: this.score.mistakes,
           passengers: this.score.passengersMoved,
-          health: Math.round(this.health),
+          health,
+          fuel,
+          fuelActive: this.fuelActive,
         };
         this.scene.start('Result', result);
       });

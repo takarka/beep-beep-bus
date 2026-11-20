@@ -52,6 +52,10 @@
 - Our own lane changes (overtaking by the player via button or Up/Down / W/S); flashing turn signals on all vehicles when changing lanes
 - Nitro boost; longer stretches between lights, stops, stations and bumps
 
+## ✅ Version 0.9 (done)
+
+- Damage and petrol carry over from one level to the next (saved per bus in the garage, shown on the map, results, menu and garage cards; fixed at gas stations)
+
 ## 🔜 Version 0.2: mobile and polish (remaining)
 
 - [ ] Phone testing: button sizes, safe areas (notch), fullscreen on the first tap
@@ -63,7 +67,6 @@
 
 - [ ] Pedestrians at crossings without a traffic light (you must stop and let them pass)
 - [ ] **STOP sign**, "children" sign, speed bumps
-- [ ] Damage and petrol that carry over from one level to the next (with the station as the place to fix both)
 - [ ] Parked cars, a bot bus that stops at the bus stops too
 - [ ] Oncoming drivers overtaking each other
 - [ ] More vehicle types (taxi, truck, ambulance that you must let pass)

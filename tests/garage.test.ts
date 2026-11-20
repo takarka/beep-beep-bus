@@ -4,11 +4,14 @@ import {
   GARAGE_SIZE,
   busCount,
   emptyGarage,
+  freshStatus,
   putBus,
   removeBus,
   sanitizeGarage,
+  sanitizeStatus,
   selectBus,
   slotForNewBus,
+  updateBusStatus,
 } from '../src/bus/garage';
 
 const red = { ...DEFAULT_DESIGN, color: 0xe63946 };
@@ -64,5 +67,32 @@ describe('garage', () => {
       current: 1,
       slots: [null, { body: 'city' }, null],
     });
+  });
+
+  it('tracks health and fuel per bus, preserves on edit, resets on remove', () => {
+    let g = putBus(emptyGarage(), 0, red);
+    g = putBus(g, 1, blue);
+    expect(g.status[0]).toEqual(freshStatus());
+    expect(g.status[1]).toEqual(freshStatus());
+
+    g = updateBusStatus(g, 0, { health: 62, fuel: 38 });
+    expect(g.status[0]).toEqual({ health: 62, fuel: 38 });
+    expect(g.status[1]).toEqual(freshStatus()); // other bus is untouched
+
+    // Editing an existing bus keeps its wear and fuel
+    g = putBus(g, 0, { ...red, number: '42' });
+    expect(g.status[0]).toEqual({ health: 62, fuel: 38 });
+
+    // Removing a bus resets its slot to fresh
+    g = removeBus(g, 0);
+    expect(g.status[0]).toEqual(freshStatus());
+  });
+
+  it('clamps and sanitizes corrupt bus status data', () => {
+    expect(sanitizeStatus({ health: 140, fuel: -15 })).toEqual({ health: 100, fuel: 0 });
+    expect(sanitizeStatus({ health: 'bad', fuel: NaN })).toEqual(freshStatus());
+    const g = sanitizeGarage({ slots: [red, null, null], status: [{ health: 44, fuel: 19 }, { health: 10, fuel: 5 }], current: 0 });
+    expect(g.status[0]).toEqual({ health: 44, fuel: 19 });
+    expect(g.status[1]).toEqual(freshStatus()); // empty slot always resets to fresh
   });
 });

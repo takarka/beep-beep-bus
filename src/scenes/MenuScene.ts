@@ -2,10 +2,11 @@ import Phaser from 'phaser';
 import { audio } from '../audio/AudioEngine';
 import { BusView } from '../bus/BusView';
 import { DEFAULT_DESIGN } from '../bus/design';
-import { loadDesign } from '../bus/garage';
+import { loadBusStatus, loadDesign } from '../bus/garage';
 import { DRIVE_SCALE } from '../bus/geometry';
 import { C, GAME_W } from '../config';
 import { completedCount, loadProgress } from '../core/progress';
+import { MAX_HEALTH } from '../core/rules';
 import { LEVEL_COUNT } from '../core/campaign';
 import { getSettings, updateSettings } from '../core/settings';
 import { DICTS, LANGS, t } from '../i18n';
@@ -64,6 +65,7 @@ export class MenuScene extends Phaser.Scene {
     this.bus = new BusView(this, GAME_W / 2, GROUND_Y, design);
     this.bus.setScale(DRIVE_SCALE[design.body]);
     this.bus.setNight(env.time === 'night');
+    if (saved) this.bus.setDamage(1 - loadBusStatus().health / MAX_HEALTH);
     this.bus.setPassengers(3);
     // Tap the bus to honk: small kids love it.
     this.bus.setInteractive(new Phaser.Geom.Rectangle(-420, -400, 840, 400), Phaser.Geom.Rectangle.Contains);

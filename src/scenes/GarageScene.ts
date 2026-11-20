@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { audio } from '../audio/AudioEngine';
 import { BusView } from '../bus/BusView';
-import { GARAGE_SIZE, loadGarage, removeBus, saveGarage, selectBus } from '../bus/garage';
+import { GARAGE_SIZE, freshStatus, loadGarage, removeBus, saveGarage, selectBus } from '../bus/garage';
 import { BODY_SIZE } from '../bus/geometry';
 import { C, GAME_W } from '../config';
+import { LOW_FUEL, MAX_FUEL, MAX_HEALTH } from '../core/rules';
 import { t } from '../i18n';
 import { Icons } from '../ui/draw';
 import { createScenery, currentEnv } from '../ui/scenery';
@@ -65,10 +66,31 @@ export class GarageScene extends Phaser.Scene {
       }
 
       // Bus preview; tapping the card makes it the current bus
+      const st = garage.status[i] ?? freshStatus();
       const { L, H } = BODY_SIZE[design.body];
-      const s = Math.min(290 / (L + 30), 175 / (H + 60));
-      const bus = new BusView(this, x, CARD_Y - 55 + (H + 40) * s * 0.5, design);
+      const s = Math.min(290 / (L + 30), 155 / (H + 60));
+      const bus = new BusView(this, x, CARD_Y - 70 + (H + 40) * s * 0.5, design);
       bus.setScale(s);
+      bus.setDamage(1 - st.health / MAX_HEALTH);
+
+      // Compact condition & petrol gauges for this bus
+      const barY = CARD_Y + 38;
+      const mini = (bx: number, k: number, fill: number, icon: (g: Phaser.GameObjects.Graphics) => void) => {
+        const ig = this.add.graphics({ x: bx, y: barY });
+        icon(ig);
+        const bw = 96;
+        card.fillStyle(0x9a9fa8, 1);
+        card.fillRoundedRect(bx + 18, barY - 7, bw, 14, 6);
+        card.fillStyle(fill, 1);
+        if (k > 0) card.fillRoundedRect(bx + 18, barY - 7, Math.max(12, bw * k), 14, 6);
+        card.lineStyle(2.5, C.ink, 1);
+        card.strokeRoundedRect(bx + 18, barY - 7, bw, 14, 6);
+      };
+      const hk = st.health / MAX_HEALTH;
+      const fk = st.fuel / MAX_FUEL;
+      mini(x - 128, hk, hk >= 0.6 ? C.green : hk >= 0.3 ? C.yellow : C.red, (g) => Icons.wrench(g, 22, C.ink));
+      mini(x + 14, fk, st.fuel <= LOW_FUEL ? C.red : fk >= 0.5 ? 0x3a86ff : C.yellow, (g) => Icons.pump(g, 22, C.ink));
+
       const pick = this.add.zone(x, CARD_Y - 55, CARD_W, 220).setInteractive();
       pick.on('pointerup', () => {
         if (selected) return;

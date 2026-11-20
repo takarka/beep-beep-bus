@@ -7,7 +7,7 @@ import { DRIVE_SCALE } from '../bus/geometry';
 import { C, GAME_W } from '../config';
 import { isCompleted, loadProgress, recordResult } from '../core/progress';
 import { MAP_NODES } from '../core/campaign';
-import { MAX_HEALTH, finalStars } from '../core/rules';
+import { LOW_FUEL, MAX_FUEL, MAX_HEALTH, finalStars } from '../core/rules';
 import { t, type TextKey } from '../i18n';
 import { Icons, drawStar } from '../ui/draw';
 import { GROUND_Y } from '../ui/textures';
@@ -40,6 +40,7 @@ export class ResultScene extends Phaser.Scene {
     this.bus = new BusView(this, 200, GROUND_Y, design);
     this.bus.setScale(DRIVE_SCALE[design.body] * 0.7);
     this.bus.setNight(env.time === 'night');
+    this.bus.setDamage(1 - health / MAX_HEALTH);
 
     const cx = GAME_W / 2;
     const panel = this.add.graphics();
@@ -93,18 +94,30 @@ export class ResultScene extends Phaser.Scene {
       g.lineBetween(-11, 11, 11, -11);
     }, r.mistakes);
 
-    // Condition of the bus: crashes and hard bumps wear it out (and a very worn bus costs a star)
+    // Condition and remaining petrol (both carry over to the next route)
+    const drawGauge = (x0: number, w: number, k: number, fillColor: number, text: string, icon: (g: Phaser.GameObjects.Graphics) => void) => {
+      const ig = this.add.graphics({ x: x0 - 24, y: 406 });
+      icon(ig);
+      const bar = this.add.graphics();
+      bar.fillStyle(0x9a9fa8, 1);
+      bar.fillRoundedRect(x0, 398, w, 16, 8);
+      bar.fillStyle(fillColor, 1);
+      if (k > 0) bar.fillRoundedRect(x0, 398, Math.max(14, w * k), 16, 8);
+      bar.lineStyle(3, C.ink, 1);
+      bar.strokeRoundedRect(x0, 398, w, 16, 8);
+      label(this, x0 + w + 36, 406, text, { size: 22, color: C.ink, strokeThickness: 0 });
+    };
     const hk = Math.min(Math.max(health / MAX_HEALTH, 0), 1);
-    const wrench = this.add.graphics({ x: cx - 150, y: 406 });
-    Icons.wrench(wrench, 34, C.ink);
-    const bar = this.add.graphics();
-    bar.fillStyle(0x9a9fa8, 1);
-    bar.fillRoundedRect(cx - 118, 398, 250, 16, 8);
-    bar.fillStyle(hk >= 0.6 ? C.green : hk >= 0.3 ? C.yellow : C.red, 1);
-    if (hk > 0) bar.fillRoundedRect(cx - 118, 398, Math.max(16, 250 * hk), 16, 8);
-    bar.lineStyle(3, C.ink, 1);
-    bar.strokeRoundedRect(cx - 118, 398, 250, 16, 8);
-    label(this, cx + 178, 406, `${health}%`, { size: 24, color: C.ink, strokeThickness: 0 });
+    const hpColor = hk >= 0.6 ? C.green : hk >= 0.3 ? C.yellow : C.red;
+    if (r.fuelActive) {
+      const fuel = r.fuel ?? MAX_FUEL;
+      const fk = Math.min(Math.max(fuel / MAX_FUEL, 0), 1);
+      const fuelColor = fuel <= LOW_FUEL ? C.red : fk >= 0.5 ? 0x3a86ff : C.yellow;
+      drawGauge(cx - 240, 150, hk, hpColor, `${health}%`, (g) => Icons.wrench(g, 30, C.ink));
+      drawGauge(cx + 56, 150, fk, fuelColor, `${fuel}%`, (g) => Icons.pump(g, 30, C.ink));
+    } else {
+      drawGauge(cx - 118, 250, hk, hpColor, `${health}%`, (g) => Icons.wrench(g, 34, C.ink));
+    }
 
     // Buttons
     new Button(this, cx - 210, 470, { r: 42, color: C.red, icon: (g, s) => Icons.home(g, s), onClick: () => this.scene.start('Menu') });
