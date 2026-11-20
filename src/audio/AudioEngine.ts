@@ -225,6 +225,12 @@ class AudioEngine {
     this.nitroNode = null;
   }
 
+  /** A soft turn-signal click-clack while our bus changes lanes. */
+  blinker(high: boolean): void {
+    if (!this.live()) return;
+    this.tone({ freq: high ? 1150 : 880, dur: 0.025, type: 'triangle', vol: 0.06 });
+  }
+
   /** The "low fuel" warning: two quick beeps. */
   lowFuel(): void {
     if (!this.live()) return;

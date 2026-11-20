@@ -49,6 +49,7 @@
 ## ✅ Version 0.8 (done)
 
 - Four lanes; other drivers overtake our bus when it is in their way; collisions between vehicles stay
+- Our own lane changes (overtaking by the player via button or Up/Down / W/S); flashing turn signals on all vehicles when changing lanes
 - Nitro boost; longer stretches between lights, stops, stations and bumps
 
 ## 🔜 Version 0.2: mobile and polish (remaining)
@@ -63,8 +64,8 @@
 - [ ] Pedestrians at crossings without a traffic light (you must stop and let them pass)
 - [ ] **STOP sign**, "children" sign, speed bumps
 - [ ] Damage and petrol that carry over from one level to the next (with the station as the place to fix both)
-- [ ] Our own lane changes (overtaking by the player), parked cars, a bot bus that stops at the bus stops too
-- [ ] Oncoming drivers overtaking each other, turn signals when changing lanes
+- [ ] Parked cars, a bot bus that stops at the bus stops too
+- [ ] Oncoming drivers overtaking each other
 - [ ] More vehicle types (taxi, truck, ambulance that you must let pass)
 - [ ] Evening / sunrise, fog, wipers
 - [ ] More routes / cities after Astana (Almaty, Shymkent, the seaside, mountains)

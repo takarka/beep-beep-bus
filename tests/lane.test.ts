@@ -347,3 +347,51 @@ describe('nitro', () => {
     expect(NITRO.accelFactor).toBeGreaterThan(1.5);
   });
 });
+
+import { LANE_CHANGE_TIME, LANE_Y, createLaneMotion, occupiesLane, startLaneChange, stepLaneChange } from '../src/traffic/lanes';
+
+describe('player lane changes', () => {
+  it('starts settled in the main lane and occupies only that lane', () => {
+    const m = createLaneMotion(0);
+    expect(m.y).toBe(LANE_Y.main);
+    expect(occupiesLane(m, 0)).toBe(true);
+    expect(occupiesLane(m, 1)).toBe(false);
+    expect(startLaneChange(m, 0)).toBe(false);
+  });
+
+  it('occupies both lanes while drifting and settles in the passing lane', () => {
+    const m = createLaneMotion(0);
+    expect(startLaneChange(m, 1)).toBe(true);
+    expect(occupiesLane(m, 0)).toBe(true);
+    expect(occupiesLane(m, 1)).toBe(true);
+
+    const midAngle = stepLaneChange(m, LANE_CHANGE_TIME * 0.4);
+    expect(midAngle).toBeLessThan(0); // nose tilts upward toward the passing lane
+    expect(m.y).toBeLessThan(LANE_Y.main);
+    expect(m.y).toBeGreaterThan(LANE_Y.passing);
+    expect(occupiesLane(m, 0)).toBe(true);
+    expect(occupiesLane(m, 1)).toBe(true);
+
+    let angle = midAngle;
+    for (let i = 0; i < 60; i++) angle = stepLaneChange(m, 0.02);
+    expect(m.y).toBe(LANE_Y.passing);
+    expect(m.changeT).toBe(0);
+    expect(angle).toBe(0);
+    expect(occupiesLane(m, 0)).toBe(false);
+    expect(occupiesLane(m, 1)).toBe(true);
+  });
+
+  it('can reverse mid-change and takes proportionally less time', () => {
+    const m = createLaneMotion(0);
+    startLaneChange(m, 1);
+    stepLaneChange(m, LANE_CHANGE_TIME * 0.3);
+    expect(startLaneChange(m, 0)).toBe(true);
+    expect(m.changeT).toBeLessThan(LANE_CHANGE_TIME * 0.5);
+    const angle = stepLaneChange(m, 0.05);
+    expect(angle).toBeGreaterThan(0); // nose tilts downward back to the main lane
+    for (let i = 0; i < 60; i++) stepLaneChange(m, 0.02);
+    expect(m.y).toBe(LANE_Y.main);
+    expect(occupiesLane(m, 0)).toBe(true);
+    expect(occupiesLane(m, 1)).toBe(false);
+  });
+});
