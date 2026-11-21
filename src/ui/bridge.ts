@@ -1,15 +1,15 @@
-import Phaser from 'phaser';
-import { GAME_H, mix, shade } from '../config';
-import { bridgeLiftAt, type BridgeData } from '../core/bridge';
-import { mulberry32 } from '../core/rng';
-import { paletteFor, type Env } from '../core/world';
-import { STREET_Y } from './textures';
+import Phaser from "phaser";
+import { GAME_H, mix, shade } from "../config";
+import { bridgeLiftAt, type BridgeData } from "../core/bridge";
+import { mulberry32 } from "../core/rng";
+import { paletteFor, type Env } from "../core/world";
+import { STREET_Y } from "./textures";
 
 type G = Phaser.GameObjects.Graphics;
 
 const ROAD_TOP = STREET_Y + 50;
 const ROAD_BOTTOM = STREET_Y + 180;
-const LAKE_TOP = STREET_Y - 14;
+const LAKE_TOP = STREET_Y + 6;
 const DECK_STEP = 32;
 
 interface WaterColors {
@@ -24,10 +24,10 @@ interface WaterColors {
 }
 
 function waterColorsFor(env: Env): WaterColors {
-  const night = env.time === 'night';
-  const sunset = env.time === 'sunset';
-  const winter = env.season === 'winter';
-  const autumn = env.season === 'autumn';
+  const night = env.time === "night";
+  const sunset = env.time === "sunset";
+  const winter = env.season === "winter";
+  const autumn = env.season === "autumn";
 
   let top = winter ? 0x8cc9e6 : autumn ? 0x4b8eb5 : 0x4eaee0;
   let bottom = winter ? 0x5c9fc4 : autumn ? 0x2d5e86 : 0x2573b0;
@@ -44,7 +44,11 @@ function waterColorsFor(env: Env): WaterColors {
     bottom = 0x101c38;
   }
   const stoneBase = winter ? 0xcfd8e2 : 0xd6cfc2;
-  const stone = night ? mix(stoneBase, 0x1b2048, 0.58) : sunset ? mix(stoneBase, 0xd46a4c, 0.22) : stoneBase;
+  const stone = night
+    ? mix(stoneBase, 0x1b2048, 0.58)
+    : sunset
+      ? mix(stoneBase, 0xd46a4c, 0.22)
+      : stoneBase;
   const stoneDark = shade(stone, -0.2);
   const rail = night ? 0x424a68 : 0x5b6370;
 
@@ -72,7 +76,13 @@ function waterColorsFor(env: Env): WaterColors {
  */
 export class BridgeView {
   private readonly shimmer: G;
-  private readonly shimmerSpots: Array<{ x: number; y: number; w: number; phase: number; speed: number }>;
+  private readonly shimmerSpots: Array<{
+    x: number;
+    y: number;
+    w: number;
+    phase: number;
+    speed: number;
+  }>;
   private readonly rippleColor: number;
   private readonly night: boolean;
   private time = 0;
@@ -85,7 +95,7 @@ export class BridgeView {
     const p = paletteFor(env);
     const wc = waterColorsFor(env);
     this.rippleColor = wc.ripple;
-    this.night = env.time === 'night';
+    this.night = env.time === "night";
     const rng = mulberry32(Math.round(data.x0 * 3 + data.x1));
     const lift = (x: number) => bridgeLiftAt([data], x);
 
@@ -102,8 +112,8 @@ export class BridgeView {
     this.drawDeck(deck, env, p, wc, lift);
     this.drawFarRailing(farRail, env, p.ink, wc, lift, lampXs);
     this.drawNearRailing(nearRail, p.ink, wc, lift);
-    if (env.time === 'night' || env.time === 'sunset') {
-      this.drawLampReflections(lake, lampXs, env.time === 'night');
+    if (env.time === "night" || env.time === "sunset") {
+      this.drawLampReflections(lake, lampXs, env.time === "night");
     }
     this.redrawShimmer();
   }
@@ -118,83 +128,89 @@ export class BridgeView {
     lift: (x: number) => number,
   ): void {
     const { x0, x1 } = this.data;
-    const pad = 110;
-    const lx0 = x0 - pad;
-    const lx1 = x1 + pad;
 
-    // Main lake body (completely covers flat street TileSprite underneath)
+    // Main lake body strictly inside [x0, x1] so flat street road & sidewalks outside the bridge stay intact
     g.fillGradientStyle(wc.top, wc.top, wc.bottom, wc.bottom, 1);
-    g.fillRect(lx0, LAKE_TOP, lx1 - lx0, GAME_H - LAKE_TOP + 4);
+    g.fillRect(x0, LAKE_TOP, x1 - x0, GAME_H - LAKE_TOP + 4);
 
     // Subtle horizontal water depth bands
     g.fillStyle(wc.bottom, 0.22);
-    g.fillRect(lx0, STREET_Y + 120, lx1 - lx0, GAME_H - (STREET_Y + 120));
+    g.fillRect(x0, STREET_Y + 120, x1 - x0, GAME_H - (STREET_Y + 120));
     g.fillStyle(wc.top, 0.25);
-    g.fillRect(lx0, LAKE_TOP, lx1 - lx0, 56);
+    g.fillRect(x0, LAKE_TOP, x1 - x0, 56);
 
     // Soft cast shadow of the bridge deck on the lake surface
     const shadowPts: Phaser.Math.Vector2[] = [];
     for (let x = x0; x <= x1; x += DECK_STEP) {
-      shadowPts.push(new Phaser.Math.Vector2(x, ROAD_BOTTOM + 24 - lift(x) * 0.28));
+      shadowPts.push(
+        new Phaser.Math.Vector2(x, ROAD_BOTTOM + 24 - lift(x) * 0.28),
+      );
     }
     shadowPts.push(new Phaser.Math.Vector2(x1, ROAD_BOTTOM + 66));
     for (let x = x1; x >= x0; x -= DECK_STEP) {
-      shadowPts.push(new Phaser.Math.Vector2(x, ROAD_BOTTOM + 66 - lift(x) * 0.22));
+      shadowPts.push(
+        new Phaser.Math.Vector2(x, ROAD_BOTTOM + 66 - lift(x) * 0.22),
+      );
     }
     g.fillStyle(wc.shadow, 0.26);
     g.fillPoints(shadowPts, true);
 
-    // Far shoreline bank along the top of the lake
+    // Far shoreline grass strip aligned flush with the flat street's grass line (STREET_Y .. STREET_Y + 8)
     g.fillStyle(grassColor, 1);
     const farShore: Phaser.Math.Vector2[] = [
-      new Phaser.Math.Vector2(lx0, LAKE_TOP - 10),
-      new Phaser.Math.Vector2(lx1, LAKE_TOP - 10),
+      new Phaser.Math.Vector2(x0, STREET_Y),
+      new Phaser.Math.Vector2(x1, STREET_Y),
     ];
-    for (let x = lx1; x >= lx0; x -= 64) {
-      const wave = Math.sin(x * 0.015) * 4;
-      farShore.push(new Phaser.Math.Vector2(x, LAKE_TOP + 6 + wave));
+    for (let x = x1; x >= x0; x -= 64) {
+      const wave = Math.sin(x * 0.015) * 3;
+      farShore.push(new Phaser.Math.Vector2(x, STREET_Y + 9 + wave));
     }
+    farShore.push(new Phaser.Math.Vector2(x0, STREET_Y + 9));
     g.fillPoints(farShore, true);
-    g.lineStyle(3, ink, 0.65);
+    g.lineStyle(2.5, ink, 0.55);
     g.beginPath();
-    for (let x = lx0; x <= lx1; x += 64) {
-      const y = LAKE_TOP + 6 + Math.sin(x * 0.015) * 4;
-      if (x === lx0) g.moveTo(x, y);
+    for (let x = x0; x <= x1; x += 64) {
+      const y = STREET_Y + 9 + Math.sin(x * 0.015) * 3;
+      if (x === x0) g.moveTo(x, y);
       else g.lineTo(x, y);
     }
+    g.lineTo(x1, STREET_Y + 9);
     g.strokePath();
 
-    // Left and right grassy shore embankments transitioning from flat street into the lake
+    // Sloped shore embankments tucked strictly inside [x0, x1] below the bridge deck
     const drawBank = (side: -1 | 1) => {
       const bx = side < 0 ? x0 : x1;
-      const outer = side < 0 ? lx0 - 16 : lx1 + 16;
-      const inner = bx + (side < 0 ? 52 : -52);
+      const dir = side < 0 ? 1 : -1;
       const pts = [
-        new Phaser.Math.Vector2(outer, LAKE_TOP - 6),
-        new Phaser.Math.Vector2(bx + (side < 0 ? 22 : -22), LAKE_TOP + 8),
-        new Phaser.Math.Vector2(inner, STREET_Y + 90),
-        new Phaser.Math.Vector2(inner + (side < 0 ? 18 : -18), GAME_H + 4),
-        new Phaser.Math.Vector2(outer, GAME_H + 4),
+        new Phaser.Math.Vector2(bx, ROAD_BOTTOM + 20),
+        new Phaser.Math.Vector2(bx + dir * 48, ROAD_BOTTOM + 36),
+        new Phaser.Math.Vector2(bx + dir * 82, GAME_H + 4),
+        new Phaser.Math.Vector2(bx, GAME_H + 4),
       ];
       g.fillStyle(grassColor, 1);
       g.fillPoints(pts, true);
-      g.lineStyle(4, ink, 0.85);
+      g.lineStyle(3, ink, 0.75);
       g.beginPath();
-      g.moveTo(pts[1]!.x, pts[1]!.y);
+      g.moveTo(pts[0]!.x, pts[0]!.y);
+      g.lineTo(pts[1]!.x, pts[1]!.y);
       g.lineTo(pts[2]!.x, pts[2]!.y);
-      g.lineTo(pts[3]!.x, pts[3]!.y);
       g.strokePath();
 
-      // Reeds / cattails near the water's edge
-      const reedCol = env.season === 'winter' ? 0xa9b7c4 : env.season === 'autumn' ? 0xb58d47 : 0x4f8a4b;
-      for (let i = 0; i < 6; i++) {
-        const rx = bx + side * (-10 - i * 16) + (rng() - 0.5) * 10;
-        const ry = STREET_Y + 190 + i * 16;
+      // Reeds / cattails along the inner shoreline
+      const reedCol =
+        env.season === "winter"
+          ? 0xa9b7c4
+          : env.season === "autumn"
+            ? 0xb58d47
+            : 0x4f8a4b;
+      for (let i = 0; i < 5; i++) {
+        const rx = bx + dir * (36 + i * 11) + (rng() - 0.5) * 6;
+        const ry = ROAD_BOTTOM + 48 + i * 11;
         g.lineStyle(3, reedCol, 1);
-        g.lineBetween(rx, ry, rx + (rng() - 0.5) * 10, ry - 26 - rng() * 14);
+        g.lineBetween(rx, ry, rx + (rng() - 0.5) * 8, ry - 20 - rng() * 12);
         if (i % 2 === 0) {
           g.fillStyle(0x6b4423, 1);
-          g.fillRoundedRect(rx - 3, ry - 32, 6, 12, 3);
+          g.fillRoundedRect(rx - 2.5, ry - 26, 5, 10, 2.5);
         }
       }
     };
@@ -208,25 +224,29 @@ export class BridgeView {
       const dx = x0 + (x1 - x0) * t;
       const dy = ROAD_BOTTOM + 42 + rng() * (GAME_H - ROAD_BOTTOM - 58);
       if (wc.ice) {
-        g.fillStyle(env.time === 'night' ? 0x8da6c4 : 0xeaf6fc, 0.85);
+        g.fillStyle(env.time === "night" ? 0x8da6c4 : 0xeaf6fc, 0.85);
         g.lineStyle(2, ink, 0.45);
         g.fillEllipse(dx, dy, 44 + rng() * 34, 12 + rng() * 5);
         g.strokeEllipse(dx, dy, 44 + rng() * 34, 12 + rng() * 5);
       } else {
-        const padCol = env.time === 'night' ? 0x265946 : 0x5aa469;
+        const padCol = env.time === "night" ? 0x265946 : 0x5aa469;
         g.fillStyle(padCol, 0.92);
         g.lineStyle(2, ink, 0.65);
         g.fillEllipse(dx, dy, 26 + rng() * 12, 10 + rng() * 4);
         g.strokeEllipse(dx, dy, 26 + rng() * 12, 10 + rng() * 4);
         if (i % 3 === 0) {
-          g.fillStyle(env.time === 'night' ? 0xc28ea4 : 0xffb3c6, 1);
+          g.fillStyle(env.time === "night" ? 0xc28ea4 : 0xffb3c6, 1);
           g.fillCircle(dx + 3, dy - 2, 4.5);
         }
       }
     }
   }
 
-  private drawLampReflections(g: G, lampXs: readonly number[], night: boolean): void {
+  private drawLampReflections(
+    g: G,
+    lampXs: readonly number[],
+    night: boolean,
+  ): void {
     const col = night ? 0xffe599 : 0xffc87c;
     const alpha = night ? 0.24 : 0.16;
     for (const lx of lampXs) {
@@ -239,8 +259,17 @@ export class BridgeView {
     }
   }
 
-  private makeShimmerSpots(rng: () => number, lift: (x: number) => number): Array<{ x: number; y: number; w: number; phase: number; speed: number }> {
-    const spots: Array<{ x: number; y: number; w: number; phase: number; speed: number }> = [];
+  private makeShimmerSpots(
+    rng: () => number,
+    lift: (x: number) => number,
+  ): Array<{ x: number; y: number; w: number; phase: number; speed: number }> {
+    const spots: Array<{
+      x: number;
+      y: number;
+      w: number;
+      phase: number;
+      speed: number;
+    }> = [];
     const { x0, x1 } = this.data;
     const count = 34;
     for (let i = 0; i < count; i++) {
@@ -248,7 +277,9 @@ export class BridgeView {
       const belowDeck = i % 3 !== 0;
       const y = belowDeck
         ? ROAD_BOTTOM + 34 + rng() * (GAME_H - ROAD_BOTTOM - 46)
-        : LAKE_TOP + 16 + rng() * Math.max(18, STREET_Y + 18 - lift(x) - (LAKE_TOP + 16));
+        : LAKE_TOP +
+          16 +
+          rng() * Math.max(18, STREET_Y + 18 - lift(x) - (LAKE_TOP + 16));
       spots.push({
         x,
         y,
@@ -265,7 +296,8 @@ export class BridgeView {
     g.clear();
     const baseAlpha = this.night ? 0.22 : 0.45;
     for (const s of this.shimmerSpots) {
-      const a = baseAlpha * (0.45 + 0.55 * Math.sin(this.time * s.speed + s.phase));
+      const a =
+        baseAlpha * (0.45 + 0.55 * Math.sin(this.time * s.speed + s.phase));
       const dx = Math.sin(this.time * 0.8 + s.phase) * 5;
       g.fillStyle(this.rippleColor, a);
       g.fillRoundedRect(s.x - s.w / 2 + dx, s.y, s.w, 3.5, 2);
@@ -276,7 +308,12 @@ export class BridgeView {
    * Stone abutments, piers standing in the lake, and wide elliptical arches beneath the curved deck.
    * Returns world x positions for bridge lamp posts.
    */
-  private drawUnderStructure(g: G, ink: number, wc: WaterColors, lift: (x: number) => number): number[] {
+  private drawUnderStructure(
+    g: G,
+    ink: number,
+    wc: WaterColors,
+    lift: (x: number) => number,
+  ): number[] {
     const { x0, x1 } = this.data;
     const span = x1 - x0;
     const archCount = 5;
@@ -327,12 +364,14 @@ export class BridgeView {
       g.strokePath();
     }
 
-    // Piers standing in the lake + shore abutments at both ends
+    // Piers standing in the lake + shore abutments flush with x0 and x1
     for (let i = 0; i <= archCount; i++) {
-      const px = x0 + i * bayW;
+      const isLeft = i === 0;
+      const isRight = i === archCount;
+      const isEnd = isLeft || isRight;
+      const w = isEnd ? 48 : pierW;
+      const px = isLeft ? x0 + w / 2 : isRight ? x1 - w / 2 : x0 + i * bayW;
       const topY = deckBottom(px) - 6;
-      const isEnd = i === 0 || i === archCount;
-      const w = isEnd ? 64 : pierW;
       const waterY = isEnd ? GAME_H + 4 : GAME_H - 10;
 
       g.fillStyle(wc.stone, 1);
@@ -342,8 +381,8 @@ export class BridgeView {
 
       // Decorative pier cap
       g.fillStyle(shade(wc.stone, 0.12), 1);
-      g.fillRoundedRect(px - w / 2 - 5, topY - 4, w + 10, 12, 4);
-      g.strokeRoundedRect(px - w / 2 - 5, topY - 4, w + 10, 12, 4);
+      g.fillRoundedRect(px - w / 2 - 4, topY - 4, w + 8, 12, 4);
+      g.strokeRoundedRect(px - w / 2 - 4, topY - 4, w + 8, 12, 4);
 
       // Water ripple ring around each in-lake pier base
       if (!isEnd) {
@@ -358,9 +397,15 @@ export class BridgeView {
     return lampXs;
   }
 
-  private drawDeck(g: G, env: Env, p: ReturnType<typeof paletteFor>, wc: WaterColors, lift: (x: number) => number): void {
+  private drawDeck(
+    g: G,
+    env: Env,
+    p: ReturnType<typeof paletteFor>,
+    wc: WaterColors,
+    lift: (x: number) => number,
+  ): void {
     const { x0, x1 } = this.data;
-    const night = env.time === 'night';
+    const night = env.time === "night";
 
     const xs: number[] = [];
     for (let x = x0; x < x1; x += DECK_STEP) xs.push(x);
@@ -377,7 +422,12 @@ export class BridgeView {
       g.fillPoints(pts, true);
     };
 
-    const strokeCurve = (yBase: number, width: number, color: number, alpha = 1) => {
+    const strokeCurve = (
+      yBase: number,
+      width: number,
+      color: number,
+      alpha = 1,
+    ) => {
       g.lineStyle(width, color, alpha);
       g.beginPath();
       xs.forEach((x, idx) => {
@@ -429,10 +479,17 @@ export class BridgeView {
     }
   }
 
-  private drawFarRailing(g: G, env: Env, ink: number, wc: WaterColors, lift: (x: number) => number, lampXs: readonly number[]): void {
+  private drawFarRailing(
+    g: G,
+    env: Env,
+    ink: number,
+    wc: WaterColors,
+    lift: (x: number) => number,
+    lampXs: readonly number[],
+  ): void {
     const { x0, x1 } = this.data;
-    const night = env.time === 'night';
-    const sunset = env.time === 'sunset';
+    const night = env.time === "night";
+    const sunset = env.time === "sunset";
     const baseY = STREET_Y + 26;
     const railH = 32;
 
@@ -494,7 +551,12 @@ export class BridgeView {
   }
 
   /** Low, open foreground guardrail so vehicles clearly drive across the bridge without being hidden. */
-  private drawNearRailing(g: G, ink: number, wc: WaterColors, lift: (x: number) => number): void {
+  private drawNearRailing(
+    g: G,
+    ink: number,
+    wc: WaterColors,
+    lift: (x: number) => number,
+  ): void {
     const { x0, x1 } = this.data;
     const baseY = ROAD_BOTTOM + 12;
     const railH = 22;
