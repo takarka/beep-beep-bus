@@ -21,7 +21,7 @@ import {
 } from '../core/rules';
 import { TrafficLightModel, type LightState } from '../core/traffic';
 import { t, type TextKey } from '../i18n';
-import { Icons, drawMiniLight, drawStar, drawStopSign } from '../ui/draw';
+import { Icons, drawCrosswalkSign, drawMiniLight, drawRoadStopSign, drawStar, drawStopSign } from '../ui/draw';
 import { GROUND_Y, PASSENGER_VARIANTS, SIDEWALK_FEET_Y, STREET_Y } from '../ui/textures';
 import { createScenery } from '../ui/scenery';
 import { landmarkForLevel } from '../core/campaign';
@@ -74,6 +74,23 @@ interface StationRt {
   pumps: number[];
 }
 
+interface CrosswalkRt {
+  lineX: number;
+  crossing: Crossing;
+  spawned: boolean;
+  rewarded: boolean;
+  hinted: boolean;
+  penalty: boolean;
+}
+
+interface StopSignRt {
+  lineX: number;
+  stopped: boolean;
+  hold: number;
+  hinted: boolean;
+  penalty: boolean;
+}
+
 type Phase = 'driving' | 'serving' | 'finishing' | 'ended';
 
 export interface DriveResult {
@@ -95,6 +112,8 @@ export class DriveScene extends Phaser.Scene {
   private score!: ScoreKeeper;
   private stops: StopRt[] = [];
   private signals: LightRt[] = [];
+  private crosswalks: CrosswalkRt[] = [];
+  private stopSigns: StopSignRt[] = [];
   private phase: Phase = 'driving';
   private v = 0;
   private stillTime = 0;
@@ -166,6 +185,8 @@ export class DriveScene extends Phaser.Scene {
     this.score = new ScoreKeeper();
     this.stops = [];
     this.signals = [];
+    this.crosswalks = [];
+    this.stopSigns = [];
     this.phase = 'driving';
     this.v = 0;
     this.stillTime = 0;
@@ -227,6 +248,8 @@ export class DriveScene extends Phaser.Scene {
       else this.createStop(item, ++stopIdx === stopsTotal);
     }
     this.level.bumps.forEach((bx) => this.createBump(bx));
+    this.level.crosswalks.forEach((cx) => this.createCrosswalk(cx));
+    this.level.stopSigns.forEach((sx) => this.createStopSign(sx));
     this.level.stations.forEach((sx) => this.createStation(sx));
     this.createFinish(env.time === 'night');
     this.createHud();
@@ -250,8 +273,7 @@ export class DriveScene extends Phaser.Scene {
 
   // ---------------------------------------------------------------- world
 
-  private createLight(data: LightData): void {
-    const x = data.lineX;
+  private drawZebra(x: number): void {
     const road = this.add.graphics().setDepth(-4);
     // Stop lines: ours across our two lanes (the lower half of the road), the oncoming one,
     // on the far side of the zebra crossing, across the two oncoming lanes.
@@ -272,18 +294,21 @@ export class DriveScene extends Phaser.Scene {
     // Zebra crossing: the bars run ALONG the road, one behind the other across its width,
     // and people walk over them (bars across the road would be a pattern for cars, not for people).
     road.fillStyle(C.roadLine, 0.92);
-    {
-      const rows = 7;
-      const roadH = ROAD_BOTTOM - ROAD_TOP;
-      let y = ROAD_TOP + 8;
-      for (let r = 0; r < rows; r++) {
-        const near = r / (rows - 1); // 0 = far side of the road, 1 = near side
-        const barH = 8 + 4 * near; // nearer bars look a little thicker
-        const slant = -12 * ((y - ROAD_TOP) / roadH); // same slant as the stop line
-        road.fillRoundedRect(x + 26 + slant, y, 144, barH, 3);
-        y += barH + 6 + 3 * near;
-      }
+    const rows = 7;
+    const roadH = ROAD_BOTTOM - ROAD_TOP;
+    let y = ROAD_TOP + 8;
+    for (let r = 0; r < rows; r++) {
+      const near = r / (rows - 1); // 0 = far side of the road, 1 = near side
+      const barH = 8 + 4 * near; // nearer bars look a little thicker
+      const slant = -12 * ((y - ROAD_TOP) / roadH); // same slant as the stop line
+      road.fillRoundedRect(x + 26 + slant, y, 144, barH, 3);
+      y += barH + 6 + 3 * near;
     }
+  }
+
+  private createLight(data: LightData): void {
+    const x = data.lineX;
+    this.drawZebra(x);
 
     // pole + head on the far sidewalk
     const px = x + 200;
@@ -311,6 +336,56 @@ export class DriveScene extends Phaser.Scene {
     };
     this.signals.push(rt);
     this.drawLamps(rt);
+  }
+
+  /** Uncontrolled zebra crossing with a blue pedestrian sign on the far sidewalk. */
+  private createCrosswalk(x: number): void {
+    this.drawZebra(x);
+    const sx = x + 200;
+    const pole = this.add.graphics().setDepth(-3);
+    pole.fillStyle(0x4a4650, 1);
+    pole.lineStyle(3, C.ink, 1);
+    pole.fillRect(sx - 5, 290, 10, STREET_Y + 44 - 290);
+    pole.strokeRect(sx - 5, 290, 10, STREET_Y + 44 - 290);
+    drawCrosswalkSign(pole, sx, 265, 34);
+    this.crosswalks.push({
+      lineX: x,
+      crossing: new Crossing(this, x + 26, x + 170),
+      spawned: false,
+      rewarded: false,
+      hinted: false,
+      penalty: false,
+    });
+  }
+
+  /** Stop line across our lanes with a red octagonal STOP sign on the near sidewalk. */
+  private createStopSign(x: number): void {
+    const road = this.add.graphics().setDepth(-4);
+    const centre = ROAD_TOP + 66;
+    const roadH = ROAD_BOTTOM - ROAD_TOP;
+    const slant0 = -12 * ((centre - ROAD_TOP) / roadH);
+    const slant1 = -12;
+    road.fillStyle(C.roadLine, 1);
+    road.fillPoints(
+      [
+        new Phaser.Math.Vector2(x - 7 + slant0, centre),
+        new Phaser.Math.Vector2(x + 7 + slant0, centre),
+        new Phaser.Math.Vector2(x + 7 + slant1, ROAD_BOTTOM),
+        new Phaser.Math.Vector2(x - 7 + slant1, ROAD_BOTTOM),
+      ],
+      true,
+    );
+
+    const sx = x + 36;
+    const sign = this.add.graphics().setDepth(20);
+    sign.fillStyle(0x4a4650, 1);
+    sign.lineStyle(3, C.ink, 1);
+    sign.fillRect(sx - 5, 530, 10, SIDEWALK_FEET_Y + 4 - 530);
+    sign.strokeRect(sx - 5, 530, 10, SIDEWALK_FEET_Y + 4 - 530);
+    drawRoadStopSign(sign, sx, 515, 36);
+    label(this, sx, 515, 'STOP', { size: 17, color: C.cream, strokeThickness: 0 }).setDepth(21);
+
+    this.stopSigns.push({ lineX: x, stopped: false, hold: 0, hinted: false, penalty: false });
   }
 
   private drawLamps(rt: LightRt): void {
@@ -506,6 +581,12 @@ export class DriveScene extends Phaser.Scene {
       } else {
         drawStopSign(bar, toBar(item.zoneEnd), 53, 12);
       }
+    }
+    for (const cx of this.level.crosswalks) {
+      drawCrosswalkSign(bar, toBar(cx), 53, 9);
+    }
+    for (const sx of this.level.stopSigns) {
+      drawRoadStopSign(bar, toBar(sx), 53, 10);
     }
     for (const sx of this.level.stations) {
       const pg = this.add.graphics({ x: toBar(sx), y: 53 }).setScrollFactor(0).setDepth(91);
@@ -1427,12 +1508,18 @@ export class DriveScene extends Phaser.Scene {
     }
     const cam = this.cameras.main;
 
-    // Other road users. A red light also holds them while people are crossing.
+    // Other road users. A red light (or pedestrians on a zebra) holds them while people are crossing.
     this.crashCooldown = Math.max(0, this.crashCooldown - dt);
-    const states = this.signals.map((l) => ({
-      lineX: l.data.lineX,
-      state: l.crossing.busy ? ('red' as LightState) : l.model.state,
-    }));
+    const states = [
+      ...this.signals.map((l) => ({
+        lineX: l.data.lineX,
+        state: l.crossing.busy ? ('red' as LightState) : l.model.state,
+      })),
+      ...this.crosswalks.map((c) => ({
+        lineX: c.lineX,
+        state: c.crossing.busy ? ('red' as LightState) : ('green' as LightState),
+      })),
+    ];
     if (this.phase !== 'finishing') {
       // Traffic in our direction is solid: we can't drive through it, and it may run into us.
       const res = this.lane.update(dt, cam.scrollX, states, {
@@ -1465,6 +1552,8 @@ export class DriveScene extends Phaser.Scene {
     this.progressBus.x = Phaser.Math.Clamp(this.toBar(this.bus.x), 370, 900);
 
     this.updateLights(dt, prevFront, front, gas);
+    this.updateCrosswalks(dt, prevFront, front, gas);
+    this.updateStopSigns(dt, prevFront, front, gas);
     this.updateStops(dt, front, gas);
     this.updateStations(dt, front, gas);
 
@@ -1477,6 +1566,15 @@ export class DriveScene extends Phaser.Scene {
     for (const L of this.signals) {
       const target = L.data.lineX - 45;
       if (L.model.state !== 'green' && front <= target + 4 && target - front <= d) return true;
+    }
+    for (const c of this.crosswalks) {
+      const target = c.lineX - 45;
+      if (c.crossing.busy && front <= target + 4 && target - front <= d) return true;
+    }
+    for (const s of this.stopSigns) {
+      if (s.stopped) continue;
+      const target = s.lineX - 45;
+      if (front <= target + 4 && target - front <= d) return true;
     }
     for (const s of this.stops) {
       if (s.state !== 'waiting') continue;
@@ -1554,6 +1652,56 @@ export class DriveScene extends Phaser.Scene {
 
       if (this.phase === 'driving' && crossedLine(prevFront, front, lineX) && state === 'red') {
         this.mistake(t('ranRed'), POINTS.ranRedLight, this.bus.x);
+        this.cameras.main.flash(200, 230, 57, 70);
+      }
+    }
+  }
+
+  private updateCrosswalks(dt: number, prevFront: number, front: number, gas: boolean): void {
+    for (const c of this.crosswalks) {
+      if (!c.spawned && front < c.lineX && c.lineX - front < 950) {
+        c.spawned = true;
+        c.crossing.spawnGroup();
+      }
+      c.crossing.update(dt);
+      if (c.crossing.busy && !c.hinted && front < c.lineX && c.lineX - front < 700) {
+        c.hinted = true;
+        this.showBanner(t('crosswalk'), C.blue, 1700, (g) => drawCrosswalkSign(g, 0, 0, 26));
+      }
+      if (c.crossing.busy && this.v < 5 && !gas && isWaitingBeforeLine(front, c.lineX) && !c.rewarded) {
+        c.rewarded = true;
+        this.award(POINTS.yielded, this.bus.x);
+        audio.reward();
+        this.showBanner(t('wellDone'), C.green, 1300, (g) => drawStar(g, 0, 0, 26, C.yellow, C.ink, 3));
+      }
+      if (this.phase === 'driving' && crossedLine(prevFront, front, c.lineX) && c.crossing.busy && !c.penalty) {
+        c.penalty = true;
+        this.mistake(t('ranCrosswalk'), POINTS.ranCrosswalk, this.bus.x);
+        this.cameras.main.flash(200, 230, 57, 70);
+      }
+    }
+  }
+
+  private updateStopSigns(dt: number, prevFront: number, front: number, gas: boolean): void {
+    for (const s of this.stopSigns) {
+      if (!s.stopped && !s.hinted && front < s.lineX && s.lineX - front < 700) {
+        s.hinted = true;
+        this.showBanner(t('stopSign'), C.red, 1600, (g) => drawRoadStopSign(g, 0, 0, 26));
+      }
+      if (!s.stopped && this.phase === 'driving' && isWaitingBeforeLine(front, s.lineX) && this.v < 5 && !gas) {
+        s.hold += dt;
+        if (s.hold >= 0.2) {
+          s.stopped = true;
+          this.award(POINTS.stopSign, this.bus.x);
+          audio.reward();
+          this.showBanner(t('greenGo'), C.green, 1200, (g) => drawStar(g, 0, 0, 26, C.yellow, C.ink, 3));
+        }
+      } else if (!s.stopped) {
+        s.hold = 0;
+      }
+      if (this.phase === 'driving' && crossedLine(prevFront, front, s.lineX) && !s.stopped && !s.penalty) {
+        s.penalty = true;
+        this.mistake(t('ranStopSign'), POINTS.ranStopSign, this.bus.x);
         this.cameras.main.flash(200, 230, 57, 70);
       }
     }

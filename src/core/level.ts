@@ -29,6 +29,10 @@ export interface LevelData {
   stations: number[];
   /** World x of the speed bumps (from level 2). */
   bumps: number[];
+  /** World x of the stop lines of uncontrolled pedestrian crossings (from level 2). */
+  crosswalks: number[];
+  /** World x of the stop lines with a STOP sign (from level 3). */
+  stopSigns: number[];
   finishX: number;
   length: number;
   maxSpeed: number;
@@ -48,6 +52,12 @@ export function levelCounts(level: number): { stops: number; lights: number } {
 
 /** How many speed bumps a level has: none on level 1, then one more every three levels. */
 export const bumpCountFor = (level: number): number => (level < 2 ? 0 : Math.min(1 + Math.floor((Math.max(level, 1) - 1) / 3), 4));
+
+/** Uncontrolled pedestrian crossings: none on level 1, then 1..3 on higher levels. */
+export const crosswalkCountFor = (level: number): number => (level < 2 ? 0 : Math.min(1 + Math.floor((Math.max(level, 1) - 2) / 3), 3));
+
+/** STOP signs: none on levels 1–2, then 1..2 on higher levels. */
+export const stopSignCountFor = (level: number): number => (level < 3 ? 0 : Math.min(1 + Math.floor((Math.max(level, 1) - 3) / 4), 2));
 
 /** Gas stations: none on level 1 (no petrol system yet), one on levels 2–5, two on 6–9, three after that. */
 export const stationCountFor = (level: number): number => (level < 2 ? 0 : level <= 5 ? 1 : level <= 9 ? 2 : 3);
@@ -111,12 +121,30 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
   }
   bumps.sort((a, b) => a - b);
 
+  // Uncontrolled pedestrian crossings go into remaining gaps.
+  const crosswalks: number[] = [];
+  for (let n = crosswalkCountFor(level); n > 0 && gaps.length > 0; n--) {
+    const g = gaps.splice(randInt(rng, 0, gaps.length - 1), 1)[0]!;
+    crosswalks.push(Math.round((spots[g]! + spots[g + 1]!) / 2 + randInt(rng, -250, 250)));
+  }
+  crosswalks.sort((a, b) => a - b);
+
+  // STOP signs go into remaining gaps.
+  const stopSigns: number[] = [];
+  for (let n = stopSignCountFor(level); n > 0 && gaps.length > 0; n--) {
+    const g = gaps.splice(randInt(rng, 0, gaps.length - 1), 1)[0]!;
+    stopSigns.push(Math.round((spots[g]! + spots[g + 1]!) / 2 + randInt(rng, -250, 250)));
+  }
+  stopSigns.sort((a, b) => a - b);
+
   const finishX = x;
   return {
     level,
     items,
     stations,
     bumps,
+    crosswalks,
+    stopSigns,
     finishX,
     length: finishX + 1400,
     maxSpeed: maxSpeedFor(level),

@@ -16,6 +16,14 @@ export const POINTS = {
   refuel: 4,
   /** The tank ran dry and somebody had to bring petrol. */
   noFuel: -10,
+  /** Stopped to let pedestrians cross at an uncontrolled zebra crossing. */
+  yielded: 5,
+  /** Drove across an uncontrolled zebra while pedestrians were crossing. */
+  ranCrosswalk: -10,
+  /** Made a full stop at a STOP sign. */
+  stopSign: 5,
+  /** Drove past a STOP sign without stopping. */
+  ranStopSign: -10,
 } as const;
 
 /** This many mistakes in a row (with nothing good in between) bring the police siren. */

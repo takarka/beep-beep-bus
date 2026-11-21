@@ -409,3 +409,37 @@ export function drawStopSign(g: G, x: number, y: number, r: number): void {
   g.fillCircle(x - r * 0.32, y + r * 0.3, r * 0.14);
   g.fillCircle(x + r * 0.32, y + r * 0.3, r * 0.14);
 }
+
+/** Blue square pedestrian-crossing sign with a white triangle and a walking figure. */
+export function drawCrosswalkSign(g: G, x: number, y: number, r: number): void {
+  g.fillStyle(C.blue, 1);
+  g.lineStyle(4, C.ink, 1);
+  g.fillRoundedRect(x - r, y - r, r * 2, r * 2, r * 0.25);
+  g.strokeRoundedRect(x - r, y - r, r * 2, r * 2, r * 0.25);
+  g.fillStyle(C.cream, 1);
+  g.fillTriangle(x, y - r * 0.72, x + r * 0.72, y + r * 0.65, x - r * 0.72, y + r * 0.65);
+  // little walking person inside
+  g.fillStyle(C.ink, 1);
+  g.fillCircle(x, y - r * 0.2, r * 0.14);
+  g.lineStyle(Math.max(2, r * 0.13), C.ink, 1);
+  g.lineBetween(x, y - r * 0.06, x, y + r * 0.28);
+  g.lineBetween(x, y + r * 0.26, x - r * 0.18, y + r * 0.56);
+  g.lineBetween(x, y + r * 0.26, x + r * 0.18, y + r * 0.56);
+  g.lineBetween(x - r * 0.16, y + r * 0.1, x + r * 0.16, y + r * 0.04);
+}
+
+/** Red octagonal STOP road sign with a crisp white rim. */
+export function drawRoadStopSign(g: G, x: number, y: number, r: number): void {
+  const pts: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i < 8; i++) {
+    const a = ((i + 0.5) * Math.PI) / 4;
+    pts.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r });
+  }
+  g.fillStyle(C.red, 1);
+  g.lineStyle(4, C.ink, 1);
+  g.fillPoints(pts, true);
+  g.strokePoints(pts, true, true);
+  const inner = pts.map((p) => ({ x: x + (p.x - x) * 0.84, y: y + (p.y - y) * 0.84 }));
+  g.lineStyle(Math.max(2, r * 0.1), C.cream, 1);
+  g.strokePoints(inner, true, true);
+}

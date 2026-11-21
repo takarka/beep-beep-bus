@@ -395,3 +395,41 @@ describe('player lane changes', () => {
     expect(occupiesLane(m, 1)).toBe(false);
   });
 });
+
+import { crosswalkCountFor, stopSignCountFor } from '../src/core/level';
+
+describe('uncontrolled crosswalks and STOP signs', () => {
+  it('none on level 1, then appear deterministically and stay well away from other stops/lights/stations/bumps', () => {
+    expect(crosswalkCountFor(1)).toBe(0);
+    expect(stopSignCountFor(1)).toBe(0);
+    expect(stopSignCountFor(2)).toBe(0);
+    expect(generateLevel(1).crosswalks).toEqual([]);
+    expect(generateLevel(1).stopSigns).toEqual([]);
+    expect(generateLevel(2).stopSigns).toEqual([]);
+
+    for (let l = 2; l <= 12; l++) {
+      const lvl = generateLevel(l);
+      expect(lvl.crosswalks).toHaveLength(crosswalkCountFor(l));
+      expect(lvl.stopSigns).toHaveLength(stopSignCountFor(l));
+      expect(lvl.crosswalks).toEqual(generateLevel(l).crosswalks);
+      expect(lvl.stopSigns).toEqual(generateLevel(l).stopSigns);
+
+      const spots = lvl.items.map((i) => (i.kind === 'stop' ? i.zoneEnd : i.lineX));
+      const others = [...spots, ...lvl.stations, ...lvl.bumps];
+      for (const cx of lvl.crosswalks) {
+        for (const o of others) expect(Math.abs(cx - o)).toBeGreaterThan(700);
+        for (const sx of lvl.stopSigns) expect(Math.abs(cx - sx)).toBeGreaterThan(700);
+      }
+      for (const sx of lvl.stopSigns) {
+        for (const o of others) expect(Math.abs(sx - o)).toBeGreaterThan(700);
+      }
+    }
+  });
+
+  it('reward yielding/stopping and penalize running across', () => {
+    expect(POINTS.yielded).toBeGreaterThan(0);
+    expect(POINTS.stopSign).toBeGreaterThan(0);
+    expect(POINTS.ranCrosswalk).toBeLessThan(0);
+    expect(POINTS.ranStopSign).toBeLessThan(0);
+  });
+});
