@@ -183,7 +183,7 @@ export class LaneTraffic {
       passTimer: 0,
       y,
       hop: 0,
-      life: randInt(this.rng, 3200, 6200),
+      life: randInt(this.rng, 2400, 4600),
       leaving: false,
     };
     this.vehicles.push(vehicle);
