@@ -160,6 +160,13 @@ export const Icons = {
       for (const x of [-0.18, 0, 0.18]) g.lineBetween(x * s + s * 0.04, s * 0.14, x * s - s * 0.04, s * 0.32);
     }
   },
+  /** Horizontal mist bars for the fog toggle. */
+  fog(g: G, s: number) {
+    g.fillStyle(0xffffff, 0.92);
+    for (const [y, w] of [[-0.2, 0.56], [0, 0.7], [0.2, 0.48]] as const) {
+      g.fillRoundedRect(-s * (w / 2), s * y - s * 0.055, s * w, s * 0.11, s * 0.055);
+    }
+  },
   /** Sun peeking out from behind a cloud: the "weather" menu button. */
   weather(g: G, s: number) {
     g.fillStyle(C.yellow, 1);

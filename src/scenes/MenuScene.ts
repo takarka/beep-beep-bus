@@ -65,6 +65,7 @@ export class MenuScene extends Phaser.Scene {
     this.bus = new BusView(this, GAME_W / 2, GROUND_Y, design);
     this.bus.setScale(DRIVE_SCALE[design.body]);
     this.bus.setNight(env.time === 'night');
+    this.bus.setWipers(env.precip);
     if (saved) this.bus.setDamage(1 - loadBusStatus().health / MAX_HEALTH);
     this.bus.setPassengers(3);
     // Tap the bus to honk: small kids love it.

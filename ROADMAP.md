@@ -67,13 +67,13 @@
 
 - [x] Pedestrians at crossings without a traffic light (you must stop and let them pass)
 - [x] **STOP sign**, "children" sign, speed bumps
-- [x] Parked cars (remaining: a bot bus that stops at the bus stops too)
-- [ ] Oncoming drivers overtaking each other
+- [x] Parked cars, a bot bus that stops at the bus stops too
+- [x] Oncoming drivers overtaking each other
 - [x] More vehicle types (taxi, truck, ambulance that you must let pass)
-- [ ] Evening / sunrise, fog, wipers
-- [ ] More routes / cities after Astana (Almaty, Shymkent, the seaside, mountains)
-- [ ] Landmark story on each level: a short postcard or fact when it is completed
-- [ ] More levels on the map (extend `core/campaign.ts`)
+- [x] Evening / sunrise, fog, wipers
+- [x] More routes / cities after Astana (Almaty, Shymkent)
+- [x] Landmark story on each level: a short postcard or fact when it is completed
+- [x] More levels on the map (extend `core/campaign.ts`)
 - [ ] Passengers with a destination: "take me to the park", where the child picks the right stop
 
 ## 🎨 Version 0.4: garage and rewards

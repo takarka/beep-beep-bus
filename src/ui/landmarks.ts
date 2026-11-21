@@ -190,6 +190,121 @@ export function drawLandmark(g: G, id: LandmarkId, a = 1): void {
       for (const x of [-4, 6, 16]) g.fillCircle(x, -1, 2);
       break;
     }
+    case 'koktobe': {
+      fill(0x5ea85b);
+      g.fillPoints([V(-30, 26), V(-6, -4), V(30, 26)], true);
+      g.strokePoints([V(-30, 26), V(-6, -4), V(30, 26)], true, true);
+      fill(SILVER);
+      g.fillRect(6, -30, 6, 46);
+      g.strokeRect(6, -30, 6, 46);
+      fill(C.red);
+      g.fillCircle(9, -16, 6);
+      g.strokeCircle(9, -16, 6);
+      break;
+    }
+    case 'medeu': {
+      fill(SILVER);
+      g.fillPoints([V(-30, 12), V(-12, -26), V(8, 12)], true);
+      g.fillPoints([V(-4, 12), V(14, -22), V(30, 12)], true);
+      fill(SKY);
+      g.fillEllipse(0, 18, 56, 18);
+      g.strokeEllipse(0, 18, 56, 18);
+      break;
+    }
+    case 'shymbulak': {
+      fill(0xf4f8fb);
+      g.fillPoints([V(-30, 24), V(-10, -24), V(8, 24)], true);
+      g.fillPoints([V(-6, 24), V(14, -28), V(30, 24)], true);
+      g.lineStyle(2, C.ink, a);
+      g.lineBetween(-26, -18, 26, -6);
+      fill(C.red);
+      g.fillRoundedRect(-6, -14, 12, 10, 3);
+      break;
+    }
+    case 'circus': {
+      fill(C.red);
+      g.slice(0, 8, 28, Math.PI, 0, false);
+      g.fillPath();
+      fill(C.cream);
+      g.fillRect(-26, 8, 52, 16);
+      g.strokeRect(-26, 8, 52, 16);
+      fill(GOLD);
+      g.fillCircle(0, -22, 4);
+      break;
+    }
+    case 'panfilov': {
+      fill(GOLD);
+      g.fillRect(-20, -4, 40, 28);
+      g.strokeRect(-20, -4, 40, 28);
+      fill(C.green);
+      g.fillPoints([V(-22, -4), V(0, -28), V(22, -4)], true);
+      g.strokePoints([V(-22, -4), V(0, -28), V(22, -4)], true, true);
+      break;
+    }
+    case 'almaty_station': {
+      fill(C.cream);
+      g.fillRect(-28, -4, 56, 28);
+      g.strokeRect(-28, -4, 56, 28);
+      fill(C.green);
+      g.fillRect(-32, -10, 64, 8);
+      fill(C.ink);
+      g.fillRect(-8, 6, 16, 18);
+      break;
+    }
+    case 'dendropark': {
+      fill(0x8a5a3b);
+      for (const x of [-14, 14]) g.fillRect(x - 3, 4, 6, 20);
+      fill(0x5ea85b);
+      g.fillCircle(-14, -4, 14);
+      g.strokeCircle(-14, -4, 14);
+      g.fillCircle(14, -8, 16);
+      g.strokeCircle(14, -8, 16);
+      break;
+    }
+    case 'baidibek': {
+      fill(0x9a8f80);
+      g.fillPoints([V(-26, 26), V(0, 6), V(26, 26)], true);
+      fill(GOLD);
+      g.fillRect(-5, -26, 10, 34);
+      g.strokeRect(-5, -26, 10, 34);
+      g.fillCircle(0, -28, 6);
+      break;
+    }
+    case 'citadel': {
+      fill(0xdcb877);
+      g.fillRect(-26, -8, 52, 32);
+      g.strokeRect(-26, -8, 52, 32);
+      for (const x of [-24, -8, 8, 20]) g.fillRect(x, -16, 8, 8);
+      fill(C.ink);
+      g.fillRect(-7, 6, 14, 18);
+      break;
+    }
+    case 'tulip': {
+      fill(0x5ea85b);
+      g.fillRect(-3, 2, 6, 22);
+      fill(C.red);
+      g.fillCircle(0, -8, 13);
+      g.strokeCircle(0, -8, 13);
+      fill(C.yellow);
+      g.fillTriangle(-8, -16, 0, -26, 8, -16);
+      break;
+    }
+    case 'shymkent_zoo': {
+      fill(C.orange);
+      g.fillRect(-24, -14, 8, 38);
+      g.fillRect(16, -14, 8, 38);
+      g.fillRect(-28, -20, 56, 10);
+      g.strokeRect(-28, -20, 56, 10);
+      break;
+    }
+    case 'shymkent_airport': {
+      fill(C.cream);
+      g.fillEllipse(0, 4, 52, 14);
+      g.strokeEllipse(0, 4, 52, 14);
+      fill(C.orange);
+      g.fillPoints([V(-6, 0), V(8, 0), V(-12, -24), V(-20, -24)], true);
+      break;
+    }
   }
 }
 

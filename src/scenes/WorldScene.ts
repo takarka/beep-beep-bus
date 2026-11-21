@@ -36,6 +36,7 @@ export class WorldScene extends Phaser.Scene {
     this.bus = new BusView(this, GAME_W / 2, 545, design);
     this.bus.setScale(DRIVE_SCALE[design.body] * 0.9);
     this.bus.setNight(env.time === 'night');
+    this.bus.setWipers(env.precip);
     this.bus.setPassengers(2);
 
     label(this, GAME_W / 2, 90, t('world'), { size: 60, color: C.yellow, strokeThickness: 10 });
@@ -48,9 +49,9 @@ export class WorldScene extends Phaser.Scene {
     panel.lineStyle(5, C.ink, 1);
     panel.strokeRoundedRect(60, 598, GAME_W - 120, 114, 30);
 
-    const x = (i: number) => 146 + i * 104;
-    const pick = (patch: Partial<{ season: Season; time: TimeOfDay; precip: boolean; auto: boolean }>) => {
-      updateSettings({ world: { auto: false, season: env.season, time: env.time, precip: env.precip, ...patch } });
+    const x = (i: number) => 122 + i * 94;
+    const pick = (patch: Partial<{ season: Season; time: TimeOfDay; precip: boolean; fog: boolean; auto: boolean }>) => {
+      updateSettings({ world: { auto: false, season: env.season, time: env.time, precip: env.precip, fog: Boolean(env.fog), ...patch } });
       this.scene.restart();
     };
     const manual = !world.auto;
@@ -62,22 +63,26 @@ export class WorldScene extends Phaser.Scene {
       ['winter', 0x4a90d9, (g, s) => Icons.snowflake(g, s)],
     ];
     seasons.forEach(([season, color, icon], i) => {
-      const b = new Button(this, x(i), ROW_Y, { r: 36, color, icon, onClick: () => pick({ season }) });
+      const b = new Button(this, x(i), ROW_Y, { r: 32, color, icon, onClick: () => pick({ season }) });
       b.setSelected(manual && env.season === season);
     });
 
-    const day = new Button(this, x(4.5), ROW_Y, { r: 36, color: 0x7cc6de, icon: (g, s) => Icons.sun(g, s), onClick: () => pick({ time: 'day' }) });
+    const day = new Button(this, x(4.3), ROW_Y, { r: 32, color: 0x7cc6de, icon: (g, s) => Icons.sun(g, s), onClick: () => pick({ time: 'day' }) });
     day.setSelected(manual && env.time === 'day');
-    const night = new Button(this, x(5.5), ROW_Y, { r: 36, color: NIGHT_BTN, icon: (g, s) => Icons.moon(g, s, NIGHT_BTN), onClick: () => pick({ time: 'night' }) });
+    const sunset = new Button(this, x(5.3), ROW_Y, { r: 32, color: 0xf4845f, icon: (g, s) => Icons.sun(g, s, 0xffd23f), onClick: () => pick({ time: 'sunset' }) });
+    sunset.setSelected(manual && env.time === 'sunset');
+    const night = new Button(this, x(6.3), ROW_Y, { r: 32, color: NIGHT_BTN, icon: (g, s) => Icons.moon(g, s, NIGHT_BTN), onClick: () => pick({ time: 'night' }) });
     night.setSelected(manual && env.time === 'night');
 
-    const clear = new Button(this, x(7), ROW_Y, { r: 36, color: 0x7cc6de, icon: (g, s) => Icons.sun(g, s), onClick: () => pick({ precip: false }) });
-    clear.setSelected(manual && !env.precip);
+    const clear = new Button(this, x(7.6), ROW_Y, { r: 32, color: 0x7cc6de, icon: (g, s) => Icons.sun(g, s), onClick: () => pick({ precip: false, fog: false }) });
+    clear.setSelected(manual && !env.precip && !env.fog);
     const snow = precipKind(env) === 'snow';
-    const wet = new Button(this, x(8), ROW_Y, { r: 36, color: 0x6b7a8f, icon: (g, s) => Icons.cloudPrecip(g, s, snow), onClick: () => pick({ precip: true }) });
+    const wet = new Button(this, x(8.6), ROW_Y, { r: 32, color: 0x6b7a8f, icon: (g, s) => Icons.cloudPrecip(g, s, snow), onClick: () => pick({ precip: !env.precip }) });
     wet.setSelected(manual && env.precip);
+    const fog = new Button(this, x(9.6), ROW_Y, { r: 32, color: 0x9aa5b1, icon: (g, s) => Icons.fog(g, s), onClick: () => pick({ fog: !env.fog }) });
+    fog.setSelected(manual && Boolean(env.fog));
 
-    const auto = new Button(this, x(9.5), ROW_Y, { r: 36, color: C.green, icon: (g, s) => Icons.dice(g, s), onClick: () => pick({ auto: true }) });
+    const auto = new Button(this, x(10.9), ROW_Y, { r: 32, color: C.green, icon: (g, s) => Icons.dice(g, s), onClick: () => pick({ auto: true }) });
     auto.setSelected(world.auto);
   }
 

@@ -2,10 +2,10 @@ import Phaser from 'phaser';
 import { GAME_W } from '../config';
 import type { LightState } from '../core/traffic';
 import { mulberry32, pick, randRange, type Rng } from '../core/rng';
-import { AI, ONCOMING_STOP_OFFSET, SPECS, bumpZones, nextSpeed, pickKind, spawnDelay, targetSpeed, type VehicleKind } from './ai';
+import { AI, ONCOMING_STOP_OFFSET, SPECS, bumpZones, nextSpeed, pickKind, spawnDelay, targetSpeed, wantsToOvertake, type VehicleKind } from './ai';
 import { CAR_COLORS, MINIBUS_COLORS, VehicleView } from './VehicleView';
 import { depthForY } from './Crossing';
-import { LANE_Y } from './lanes';
+import { LANE_CHANGE_TIME, LANE_Y } from './lanes';
 
 /** The two oncoming lanes: 0 = the one next to the middle line, 1 = the far one. */
 const ONCOMING_Y = [LANE_Y.oncomingNear, LANE_Y.oncomingFar] as const;
@@ -30,6 +30,11 @@ interface Vehicle {
   scale: number;
   /** 0 = near oncoming lane, 1 = far oncoming lane. */
   lane: 0 | 1;
+  fromLane: 0 | 1;
+  changeT: number;
+  cool: number;
+  passTimer: number;
+  y: number;
 }
 
 export interface SignalState {
@@ -73,7 +78,21 @@ export class TrafficManager {
     view.setPosition(x, ONCOMING_Y[lane]);
     view.setDepth(depthForY(ONCOMING_Y[lane]));
     const cruise = randRange(this.rng, spec.cruise[0], spec.cruise[1]);
-    const vehicle: Vehicle = { kind, view, x, v: cruise, cruise, len: spec.length * scale, scale, lane };
+    const vehicle: Vehicle = {
+      kind,
+      view,
+      x,
+      v: cruise,
+      cruise,
+      len: spec.length * scale,
+      scale,
+      lane,
+      fromLane: lane,
+      changeT: 0,
+      cool: randRange(this.rng, 0.4, 1.5),
+      passTimer: 0,
+      y: ONCOMING_Y[lane],
+    };
     this.vehicles.push(vehicle);
     return vehicle;
   }
@@ -84,9 +103,9 @@ export class TrafficManager {
     // Each lane has its own queue. Leaders first: the vehicle with the smallest x is furthest along.
     const ordered = this.vehicles.slice().sort((a, b) => a.x - b.x);
     ordered.forEach((veh) => {
-      const leader = ordered.filter((o) => o.lane === veh.lane && o.x < veh.x).pop() ?? null;
+      const leader = ordered.filter((o) => (o.lane === veh.lane || (o.changeT > 0 && o.fromLane === veh.lane)) && o.x < veh.x).pop() ?? null;
       const target = targetSpeed({
-        cruise: veh.cruise,
+        cruise: veh.cruise * (veh.lane === 0 && veh.passTimer > 0 ? 1.15 : 1),
         v: veh.v,
         front: veh.x - veh.len / 2,
         leaderRear: leader ? leader.x + leader.len / 2 : null,
@@ -94,11 +113,21 @@ export class TrafficManager {
         zones: this.zones,
       });
       veh.v = nextSpeed(veh.v, target, dt);
+      veh.cool -= dt;
+      veh.passTimer -= dt;
+      if (veh.changeT > 0) veh.changeT -= dt;
+      else if (veh.cool <= 0) this.decideLane(veh, leader, lights);
+      const targetY = ONCOMING_Y[veh.lane];
+      const stepY = (Math.abs(ONCOMING_Y[0] - ONCOMING_Y[1]) / LANE_CHANGE_TIME) * dt;
+      veh.y += Phaser.Math.Clamp(targetY - veh.y, -stepY, stepY);
+
       const dx = veh.v * dt;
       const before = veh.x;
       veh.x -= dx;
       for (const bx of this.opts.bumps) if (before > bx && veh.x <= bx) this.hop(veh);
-      veh.view.setX(veh.x);
+      veh.view.setPosition(veh.x, veh.y);
+      veh.view.setDepth(depthForY(veh.y));
+      veh.view.setBlinker(veh.changeT > 0, this.scene.time.now);
       veh.view.roll(dx, veh.scale);
       if (veh.kind === 'police' || veh.kind === 'ambulance') veh.view.siren(this.scene.time.now);
     });
@@ -112,6 +141,31 @@ export class TrafficManager {
 
     this.timer -= dt;
     if (this.timer <= 0) this.timer = this.trySpawn(scrollX) ? spawnDelay(this.rng, this.opts.level) : 0.4;
+  }
+
+  /** Oncoming drivers overtake slower vehicles ahead when the other oncoming lane is clear. */
+  private decideLane(veh: Vehicle, leader: Vehicle | null, lights: readonly { stopX: number; state: LightState }[]): void {
+    const front = veh.x - veh.len / 2;
+    const blocked =
+      lights.some((l) => l.state !== 'green' && front > l.stopX - 20 && front - l.stopX < 800) ||
+      this.opts.bumps.some((bx) => front > bx - 60 && front - bx < 420);
+    if (blocked) return;
+    const other: 0 | 1 = veh.lane === 0 ? 1 : 0;
+    const clear = !this.vehicles.some(
+      (o) =>
+        o !== veh &&
+        (o.lane === other || (o.changeT > 0 && o.fromLane === other)) &&
+        Math.abs(o.x - veh.x) < (o.len + veh.len) / 2 + 160,
+    );
+    if (!clear) return;
+    const gap = leader ? front - (leader.x + leader.len / 2) : Infinity;
+    if (leader && wantsToOvertake(veh.cruise, veh.v, { gap, v: leader.v })) {
+      veh.fromLane = veh.lane;
+      veh.lane = other;
+      veh.changeT = LANE_CHANGE_TIME;
+      veh.passTimer = 1.8;
+      veh.cool = LANE_CHANGE_TIME + 1.0;
+    }
   }
 
   /** A little hop as the vehicle drives over a bump. */

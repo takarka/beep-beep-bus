@@ -2,7 +2,7 @@ import { mix } from '../config';
 
 /** The setting of a route: which season, day or night, and whether it rains / snows. */
 export const SEASONS = ['summer', 'autumn', 'winter', 'spring'] as const;
-export const TIMES = ['day', 'night'] as const;
+export const TIMES = ['day', 'sunset', 'night'] as const;
 export type Season = (typeof SEASONS)[number];
 export type TimeOfDay = (typeof TIMES)[number];
 
@@ -11,6 +11,8 @@ export interface Env {
   time: TimeOfDay;
   /** Rain (snow in winter). */
   precip: boolean;
+  /** Soft mist across the road. */
+  fog?: boolean;
 }
 
 /** What the child picked on the weather screen. `auto` = the setting changes with the level. */
@@ -18,7 +20,7 @@ export interface WorldSetting extends Env {
   auto: boolean;
 }
 
-export const DEFAULT_WORLD: WorldSetting = { auto: true, season: 'summer', time: 'day', precip: false };
+export const DEFAULT_WORLD: WorldSetting = { auto: true, season: 'summer', time: 'day', precip: false, fog: false };
 
 export const isSeason = (v: unknown): v is Season => (SEASONS as readonly string[]).includes(v as string);
 export const isTime = (v: unknown): v is TimeOfDay => (TIMES as readonly string[]).includes(v as string);
@@ -30,29 +32,30 @@ export function sanitizeWorld(raw: unknown): WorldSetting {
     season: isSeason(r.season) ? r.season : DEFAULT_WORLD.season,
     time: isTime(r.time) ? r.time : DEFAULT_WORLD.time,
     precip: typeof r.precip === 'boolean' ? r.precip : DEFAULT_WORLD.precip,
+    fog: typeof r.fog === 'boolean' ? r.fog : DEFAULT_WORLD.fog,
   };
 }
 
 /** Level 1 is the familiar sunny summer day, then the world keeps changing. */
 const CYCLE: readonly Env[] = [
-  { season: 'summer', time: 'day', precip: false },
-  { season: 'autumn', time: 'day', precip: false },
-  { season: 'winter', time: 'day', precip: true },
-  { season: 'spring', time: 'day', precip: true },
-  { season: 'summer', time: 'night', precip: false },
-  { season: 'autumn', time: 'night', precip: true },
-  { season: 'winter', time: 'night', precip: true },
-  { season: 'spring', time: 'night', precip: false },
-  { season: 'summer', time: 'day', precip: true },
-  { season: 'autumn', time: 'night', precip: false },
-  { season: 'winter', time: 'day', precip: false },
-  { season: 'spring', time: 'day', precip: false },
+  { season: 'summer', time: 'day', precip: false, fog: false },
+  { season: 'autumn', time: 'day', precip: false, fog: false },
+  { season: 'winter', time: 'day', precip: true, fog: false },
+  { season: 'spring', time: 'sunset', precip: false, fog: false },
+  { season: 'summer', time: 'night', precip: false, fog: false },
+  { season: 'autumn', time: 'night', precip: true, fog: false },
+  { season: 'winter', time: 'night', precip: true, fog: false },
+  { season: 'spring', time: 'day', precip: true, fog: true },
+  { season: 'summer', time: 'sunset', precip: false, fog: false },
+  { season: 'autumn', time: 'sunset', precip: false, fog: true },
+  { season: 'winter', time: 'day', precip: false, fog: false },
+  { season: 'spring', time: 'night', precip: false, fog: false },
 ];
 
 export const envForLevel = (level: number): Env => CYCLE[(Math.max(1, Math.floor(level)) - 1) % CYCLE.length]!;
 
 export function resolveEnv(level: number, world: WorldSetting): Env {
-  return world.auto ? envForLevel(level) : { season: world.season, time: world.time, precip: world.precip };
+  return world.auto ? envForLevel(level) : { season: world.season, time: world.time, precip: world.precip, fog: Boolean(world.fog) };
 }
 
 export const precipKind = (env: Env): 'rain' | 'snow' => (env.season === 'winter' ? 'snow' : 'rain');
@@ -112,12 +115,17 @@ const NIGHT_INK = 0x1b2048;
 export function paletteFor(env: Env): Palette {
   const b = BASE[env.season];
   const night = env.time === 'night';
-  // Everything that is not a light gets pulled towards deep blue at night.
-  const dim = (c: number, t = 0.55) => (night ? mix(c, NIGHT_INK, t) : c);
-  const grey = (c: number, t: number) => (env.precip ? mix(c, 0x8d98a5, t) : c);
+  const sunset = env.time === 'sunset';
+  // Everything that is not a light gets pulled towards deep blue at night, or warm amber at sunset.
+  const dim = (c: number, t = 0.55) => (night ? mix(c, NIGHT_INK, t) : sunset ? mix(c, 0xd46a4c, t * 0.32) : c);
+  const grey = (c: number, t: number) => (env.precip ? mix(c, 0x8d98a5, t) : env.fog ? mix(c, 0xcfd8e3, t * 0.8) : c);
 
   let skyTop = grey(b.skyTop, 0.45);
   let skyBottom = grey(b.skyBottom, 0.4);
+  if (sunset) {
+    skyTop = grey(0x5c4d8a, 0.35);
+    skyBottom = grey(0xff9e6d, 0.35);
+  }
   if (night) {
     skyTop = env.precip ? 0x20263f : 0x141a3a;
     skyBottom = env.precip ? 0x3a3d5c : 0x3b3a6a;
@@ -135,10 +143,10 @@ export function paletteFor(env: Env): Palette {
     road: night ? 0x3b3e49 : env.precip ? 0x50545d : 0x5b5f67,
     roadLine: night ? 0xc9c6b6 : 0xf4f1de,
     buildings: BUILDINGS.map((c) => dim(grey(c, 0.15), 0.6)),
-    litWindowChance: night ? 0.65 : 0.25,
+    litWindowChance: night ? 0.65 : sunset ? 0.45 : 0.25,
     foliage: b.foliage.map((c) => dim(c, 0.5)),
     trunk: dim(0x8a5a3b, 0.5),
-    cloudTint: night ? 0x4a5080 : env.precip ? 0x9aa5b1 : env.season === 'winter' ? 0xf0f5fa : 0xffffff,
+    cloudTint: night ? 0x4a5080 : sunset ? 0xffc6a8 : env.precip ? 0x9aa5b1 : env.season === 'winter' ? 0xf0f5fa : 0xffffff,
     sunVisible: !night && !env.precip,
     moonVisible: night,
     ink: night ? NIGHT_INK : 0x2d2a32,

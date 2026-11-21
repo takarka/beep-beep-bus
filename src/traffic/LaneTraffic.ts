@@ -56,6 +56,8 @@ interface LaneVehicle {
   parked?: boolean;
   ambState?: 'approaching' | 'passed' | 'blocked';
   ambBlockedTime?: number;
+  stopWait?: number;
+  stopsDone?: Set<number>;
 }
 
 export interface SignalState {
@@ -106,7 +108,7 @@ export class LaneTraffic {
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly opts: { night: boolean; level: number; bumps: readonly number[]; parked?: readonly number[] },
+    private readonly opts: { night: boolean; level: number; bumps: readonly number[]; parked?: readonly number[]; stops?: readonly number[] },
   ) {
     this.plan = lanePlan(opts.level);
     this.zones = bumpZones(opts.bumps, true);
@@ -243,17 +245,40 @@ export class LaneTraffic {
         if (next && (!leader || next.x < leader.x)) leader = next;
       }
       const ambCruise = veh.kind === 'ambulance' ? Math.max(veh.cruise, player ? player.v + 95 : 0, 380) : veh.cruise;
+      const busStops =
+        veh.kind === 'bus' && veh.lane === 0 && (veh.stopWait ?? 0) <= 0
+          ? (this.opts.stops ?? [])
+              .filter((zx) => !veh.stopsDone?.has(zx))
+              .map((zx) => ({ stopX: -zx, state: 'red' as LightState }))
+          : [];
       let target = targetSpeed({
         cruise: ambCruise * (veh.lane === 1 ? 1.18 : 1), // in the passing lane a driver speeds up to get by
         v: veh.v,
         front: -(veh.x + veh.len / 2),
         leaderRear: leader ? -(leader.x - leader.len / 2) : null,
-        lights,
+        lights: busStops.length ? [...lights, ...busStops] : lights,
         zones: this.zones,
         headway: d.headway,
         minGap: d.minGap,
         brake: d.planBrake,
       });
+      if (veh.kind === 'bus' && veh.lane === 0) {
+        if ((veh.stopWait ?? 0) > 0) {
+          veh.stopWait = veh.stopWait! - dt;
+          target = 0;
+          if (veh.stopWait <= 0 && veh.view instanceof BusView) void veh.view.closeDoors();
+        } else if (veh.v < 8) {
+          const front = veh.x + veh.len / 2;
+          const zx = (this.opts.stops ?? []).find((s) => !veh.stopsDone?.has(s) && front >= s - 90 && front <= s + 30);
+          if (zx !== undefined) {
+            veh.stopsDone ??= new Set();
+            veh.stopsDone.add(zx);
+            veh.stopWait = 2.2;
+            target = 0;
+            if (veh.view instanceof BusView) void veh.view.openDoors();
+          }
+        }
+      }
       if (veh.stall > 0) {
         veh.stall -= dt;
         target = 0;

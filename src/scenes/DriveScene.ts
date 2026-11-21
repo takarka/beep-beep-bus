@@ -237,11 +237,18 @@ export class DriveScene extends Phaser.Scene {
     this.bus.setScale(DRIVE_SCALE[design.body]).setDepth(10);
     this.camLead = 140 + this.bus.lengthWorld() / 2;
     this.bus.setNight(env.time === 'night');
+    this.bus.setWipers(env.precip);
     this.bus.setDamage(1 - this.health / MAX_HEALTH);
     this.updateSmoke();
     this.traffic = new TrafficManager(this, { night: env.time === 'night', level: this.level.level, bumps: this.level.bumps });
     this.traffic.prewarm(Phaser.Math.Clamp(START_X - this.camLead, 0, this.level.length - GAME_W));
-    this.lane = new LaneTraffic(this, { night: env.time === 'night', level: this.level.level, bumps: this.level.bumps, parked: this.level.parked });
+    this.lane = new LaneTraffic(this, {
+      night: env.time === 'night',
+      level: this.level.level,
+      bumps: this.level.bumps,
+      parked: this.level.parked,
+      stops: this.level.items.filter((i) => i.kind === 'stop').map((i) => i.zoneEnd),
+    });
     this.lane.prewarm(START_X);
     this.bus.setPassengers(0);
 

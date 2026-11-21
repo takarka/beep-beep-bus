@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LANDMARKS, LEVEL_COUNT, MAP_NODES, landmarkForLevel } from '../src/core/campaign';
+import { CITIES, CITY_RANGES, LANDMARKS, LEVEL_COUNT, MAP_NODES, cityForLevel, landmarkForLevel } from '../src/core/campaign';
 import { DICTS } from '../src/i18n';
 import { generateLevel, levelCounts, maxSpeedFor } from '../src/core/level';
 import {
@@ -25,9 +25,16 @@ describe('campaign map', () => {
       expect(n.y).toBeGreaterThan(150);
       expect(n.y).toBeLessThan(620);
     }
-    for (let i = 0; i < MAP_NODES.length; i++)
-      for (let j = i + 1; j < MAP_NODES.length; j++)
-        expect(Math.hypot(MAP_NODES[i]!.x - MAP_NODES[j]!.x, MAP_NODES[i]!.y - MAP_NODES[j]!.y)).toBeGreaterThan(170);
+    for (const city of CITIES) {
+      const { start, end } = CITY_RANGES[city];
+      const nodes = MAP_NODES.slice(start - 1, end);
+      for (let i = 0; i < nodes.length; i++)
+        for (let j = i + 1; j < nodes.length; j++)
+          expect(Math.hypot(nodes[i]!.x - nodes[j]!.x, nodes[i]!.y - nodes[j]!.y)).toBeGreaterThan(170);
+    }
+    expect(cityForLevel(1)).toBe('astana');
+    expect(cityForLevel(13)).toBe('almaty');
+    expect(cityForLevel(20)).toBe('shymkent');
   });
 
   it('every level finishes at its own landmark', () => {
@@ -36,9 +43,12 @@ describe('campaign map', () => {
     expect(landmarkForLevel(0)).toBe(landmarkForLevel(LEVEL_COUNT)); // never crashes on odd input
   });
 
-  it('names every landmark in every language', () => {
+  it('names and describes every landmark in every language', () => {
     for (const lang of Object.values(DICTS))
-      for (const id of LANDMARKS) expect(lang[`lm_${id}` as keyof typeof lang].trim()).not.toBe('');
+      for (const id of LANDMARKS) {
+        expect(lang[`lm_${id}` as keyof typeof lang].trim()).not.toBe('');
+        expect(lang[`fact_${id}` as keyof typeof lang].trim()).not.toBe('');
+      }
   });
 });
 

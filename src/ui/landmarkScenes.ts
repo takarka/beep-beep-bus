@@ -287,5 +287,87 @@ export function drawLandmarkBig(g: G, id: LandmarkId, night = false): void {
       poly(C.blue, [V(-152, -194), V(-144, -194), V(-160, -214), V(-166, -214)]);
       break;
     }
+    case 'koktobe': {
+      poly(0x5ea85b, [V(-210, 0), V(-40, -170), V(180, 0)]);
+      rect(SILVER, 48, -295, 22, 235);
+      disc(C.red, 59, -205, 26);
+      line(5, 59, -295, 59, -335, ink);
+      break;
+    }
+    case 'medeu': {
+      poly(SILVER, [V(-220, 0), V(-110, -240), V(20, 0)]);
+      poly(0xaec8da, [V(-10, 0), V(110, -210), V(220, 0)]);
+      rect(STONE, -180, -48, 360, 48);
+      g.fillStyle(tone(SKY), 1);
+      g.fillEllipse(0, -14, 310, 26);
+      g.strokeEllipse(0, -14, 310, 26);
+      break;
+    }
+    case 'shymbulak': {
+      poly(0xf4f8fb, [V(-220, 0), V(-90, -260), V(40, 0)]);
+      poly(0xe9f1f7, [V(-20, 0), V(110, -280), V(220, 0)]);
+      line(4, -200, -210, 200, -110, ink);
+      rect(C.red, -24, -180, 48, 34, 8);
+      win(-16, -172, 32, 16);
+      break;
+    }
+    case 'circus': {
+      rect(STONE, -160, -90, 320, 90);
+      dome(C.red, 0, -90, 175, 0.72);
+      disc(GOLD, 0, -225, 16);
+      rect(0x3b3640, -34, -46, 68, 46);
+      break;
+    }
+    case 'panfilov': {
+      rect(GOLD, -130, -135, 260, 135);
+      poly(C.green, [V(-150, -135), V(0, -270), V(150, -135)]);
+      for (const x of [-80, 0, 80]) win(x - 16, -100, 32, 54);
+      rect(0x3b3640, -24, -44, 48, 44);
+      break;
+    }
+    case 'almaty_station': {
+      rect(STONE, -200, -115, 400, 115);
+      rect(C.green, -212, -135, 424, 22, 6);
+      for (let i = -3; i <= 3; i++) if (i !== 0) win(i * 48 - 14, -92, 28, 46);
+      rect(0x3b3640, -28, -50, 56, 50);
+      break;
+    }
+    case 'dendropark': {
+      for (const [x, r] of [[-120, 68], [0, 84], [120, 72]] as const) {
+        rect(0x8a5a3b, x - 12, -90, 24, 90);
+        disc(0x5ea85b, x, -125, r);
+      }
+      break;
+    }
+    case 'baidibek': {
+      poly(0x9a8f80, [V(-170, 0), V(0, -95), V(170, 0)]);
+      rect(GOLD, -24, -275, 48, 190);
+      disc(GOLD, 0, -295, 24);
+      break;
+    }
+    case 'citadel': {
+      rect(0xdcb877, -175, -130, 350, 130);
+      for (const x of [-160, -100, -40, 20, 80, 140]) rect(0xdcb877, x - 16, -160, 32, 30);
+      archWin(-36, -68, 72, 68);
+      break;
+    }
+    case 'tulip': {
+      rect(0x5ea85b, -10, -140, 20, 140);
+      disc(C.red, 0, -175, 58);
+      poly(C.yellow, [V(-46, -200), V(0, -255), V(46, -200)]);
+      break;
+    }
+    case 'shymkent_zoo': {
+      rect(C.orange, -140, -180, 40, 180);
+      rect(C.orange, 100, -180, 40, 180);
+      rect(C.yellow, -165, -215, 330, 40, 10);
+      break;
+    }
+    case 'shymkent_airport': {
+      rect(STONE, -210, -95, 420, 95);
+      rect(C.orange, -222, -110, 444, 16);
+      for (let i = -3; i <= 3; i++) win(i * 52 - 18, -76, 36, 40);
+      break;
+    }
   }
 }

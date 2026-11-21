@@ -5,7 +5,7 @@ import { DEFAULT_DESIGN } from '../bus/design';
 import { loadBusStatus, loadDesign } from '../bus/garage';
 import { BODY_SIZE } from '../bus/geometry';
 import { C, GAME_H, GAME_W, hex } from '../config';
-import { LEVEL_COUNT, MAP_NODES, type MapNode } from '../core/campaign';
+import { CITIES, CITY_RANGES, LEVEL_COUNT, MAP_NODES, cityForLevel, type CityId, type MapNode } from '../core/campaign';
 import { LOW_FUEL, MAX_FUEL, MAX_HEALTH } from '../core/rules';
 import {
   completedCount,
@@ -264,12 +264,13 @@ export class MapScene extends Phaser.Scene {
   private scoreText!: Phaser.GameObjects.Text;
   private countText!: Phaser.GameObjects.Text;
   private playBtn!: Button;
+  private city: CityId = 'astana';
 
   constructor() {
     super('Map');
   }
 
-  create(data?: { celebrate?: number }): void {
+  create(data?: { celebrate?: number; city?: CityId }): void {
     this.cameras.main.fadeIn(250, 45, 42, 50);
     this.nodes = [];
     this.moving = false;
@@ -277,6 +278,7 @@ export class MapScene extends Phaser.Scene {
     const progress = loadProgress();
     // A level that was just completed for the first time gets a stamp + the bus drives on to the next one.
     const cel = data?.celebrate && isCompleted(progress, data.celebrate) ? data.celebrate : 0;
+    this.city = data?.city ?? cityForLevel(cel || progress.level);
 
     drawMapBackground(this);
     this.createRoads(progress, cel);
@@ -300,27 +302,43 @@ export class MapScene extends Phaser.Scene {
 
   private createRoads(p: Progress, cel: number): void {
     const g = this.add.graphics().setDepth(-4);
-    for (let i = 0; i < LEVEL_COUNT - 1; i++) {
+    const { start, end } = CITY_RANGES[this.city];
+    for (let i = start - 1; i < end - 1; i++) {
       const done = isCompleted(p, i + 1) && i + 1 !== cel;
       drawRoad(g, segment(i), done);
     }
   }
 
   private createNodes(p: Progress, cel: number): void {
-    MAP_NODES.forEach((node, i) => {
-      const level = i + 1;
+    const { start, end } = CITY_RANGES[this.city];
+    for (let level = start; level <= end; level++) {
+      const node = MAP_NODES[level - 1]!;
       const nv = new NodeView(this, level, node);
       nv.setNodeState(this.visualState(p, level, cel), p.stars[String(level)] ?? 0);
       nv.on('pointerup', () => this.onTap(nv));
       this.nodes.push(nv);
-    });
+    }
   }
 
   private createHud(p: Progress, cel: number): void {
     new Button(this, 56, 52, { r: 34, color: C.red, icon: (g, s) => Icons.home(g, s), onClick: () => this.scene.start('Menu') });
     new Button(this, 140, 52, { r: 34, color: C.purple, icon: (g, s) => Icons.bus(g, s), onClick: () => this.scene.start('Garage') });
     addAudioToggles(this, GAME_W - 56, 52);
-    label(this, GAME_W / 2, 56, t('astana'), { size: 58, color: C.yellow, strokeThickness: 10 });
+    CITIES.forEach((c, idx) => {
+      const active = c === this.city;
+      const b = new Button(this, GAME_W / 2 - 170 + idx * 170, 50, {
+        w: 156,
+        h: 50,
+        color: active ? C.yellow : C.cream,
+        text: t(c),
+        textSize: 22,
+        onClick: () => {
+          if (!this.busy && c !== this.city) this.scene.restart({ city: c });
+        },
+      });
+      b.setSelected(active);
+      b.setDepth(45);
+    });
 
     // overall progress: points + completed levels
     const done = completedCount(p) - (cel && isCompleted(p, cel) ? 1 : 0);
@@ -367,12 +385,17 @@ export class MapScene extends Phaser.Scene {
   private createBus(p: Progress, cel: number): void {
     const design = loadDesign() ?? { ...DEFAULT_DESIGN };
     this.busScale = BUS_LEN / BODY_SIZE[design.body].L;
-    const at = restPoint((cel || p.level) - 1);
+    const targetLvl = cel || p.level;
+    const at = restPoint(targetLvl - 1);
     this.bus = new BusView(this, at.x, at.y + BUS_ON_ROAD, design);
     this.bus.setScale(this.busScale).setDepth(30);
     this.bus.setDamage(1 - loadBusStatus().health / MAX_HEALTH);
     this.bus.setPassengers(2);
-    this.tweens.add({ targets: this.bus, y: this.bus.y - 5, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
+    if (cityForLevel(targetLvl) !== this.city) {
+      this.bus.setVisible(false);
+    } else {
+      this.tweens.add({ targets: this.bus, y: this.bus.y - 5, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
+    }
   }
 
   /** A big "continue" button: the child doesn't have to aim at the right landmark. */
@@ -426,8 +449,9 @@ export class MapScene extends Phaser.Scene {
 
   private celebrate(p: Progress, cel: number): void {
     this.busy = true;
-    const node = this.nodes[cel - 1]!;
+    const node = this.nodes.find((n) => n.level === cel)!;
     const stars = p.stars[String(cel)] ?? 1;
+    const { end } = CITY_RANGES[this.city];
     this.time.delayedCall(700, () => {
       node.setNodeState('done', stars);
       node.pop();
@@ -442,6 +466,13 @@ export class MapScene extends Phaser.Scene {
 
     if (cel >= LEVEL_COUNT) {
       this.time.delayedCall(1500, () => this.finale());
+      return;
+    }
+    if (cel >= end) {
+      this.time.delayedCall(1500, () => {
+        this.busy = false;
+        this.revealPlay();
+      });
       return;
     }
     this.time.delayedCall(1700, () => {
@@ -475,9 +506,11 @@ export class MapScene extends Phaser.Scene {
         },
         onComplete: () => {
           this.moving = false;
-          const next = this.nodes[cel]!;
-          next.setNodeState('current');
-          next.pop();
+          const next = this.nodes.find((n) => n.level === cel + 1);
+          if (next) {
+            next.setNodeState('current');
+            next.pop();
+          }
           audio.select();
           this.tweens.add({ targets: this.bus, y: this.bus.y - 5, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
           this.busy = false;

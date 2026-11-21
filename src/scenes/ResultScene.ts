@@ -10,6 +10,7 @@ import { MAP_NODES } from '../core/campaign';
 import { LOW_FUEL, MAX_FUEL, MAX_HEALTH, finalStars } from '../core/rules';
 import { t, type TextKey } from '../i18n';
 import { Icons, drawStar } from '../ui/draw';
+import { drawLandmark } from '../ui/landmarks';
 import { GROUND_Y } from '../ui/textures';
 import { createScenery } from '../ui/scenery';
 import { getSettings } from '../core/settings';
@@ -45,13 +46,13 @@ export class ResultScene extends Phaser.Scene {
     const cx = GAME_W / 2;
     const panel = this.add.graphics();
     panel.fillStyle(C.cream, 0.97);
-    panel.fillRoundedRect(cx - 330, 30, 660, 520, 34);
+    panel.fillRoundedRect(cx - 330, 24, 660, 536, 34);
     panel.lineStyle(6, C.ink, 1);
-    panel.strokeRoundedRect(cx - 330, 30, 660, 520, 34);
+    panel.strokeRoundedRect(cx - 330, 24, 660, 536, 34);
 
-    label(this, cx, 100, t('results'), { size: 50, color: C.yellow });
+    label(this, cx, 88, t('results'), { size: 50, color: C.yellow });
     const landmark = MAP_NODES[r.level - 1]?.landmark;
-    label(this, cx, 150, `${t('level')} ${r.level}${landmark ? ' · ' + t(`lm_${landmark}` as TextKey) : ''}`, { size: 28, color: C.ink, strokeThickness: 0 });
+    label(this, cx, 138, `${t('level')} ${r.level}${landmark ? ' · ' + t(`lm_${landmark}` as TextKey) : ''}`, { size: 28, color: C.ink, strokeThickness: 0 });
 
     // Stars pop in one by one
     for (let i = 0; i < 3; i++) {
@@ -117,6 +118,19 @@ export class ResultScene extends Phaser.Scene {
       drawGauge(cx + 56, 150, fk, fuelColor, `${fuel}%`, (g) => Icons.pump(g, 30, C.ink));
     } else {
       drawGauge(cx - 118, 250, hk, hpColor, `${health}%`, (g) => Icons.wrench(g, 34, C.ink));
+    }
+
+    // Landmark postcard: a short kid-friendly fact about where we arrived
+    if (landmark) {
+      const card = this.add.graphics();
+      card.fillStyle(0xfff8e7, 1);
+      card.fillRoundedRect(cx - 290, 444, 580, 90, 18);
+      card.lineStyle(3, C.ink, 0.7);
+      card.strokeRoundedRect(cx - 290, 444, 580, 90, 18);
+      const icon = this.add.graphics({ x: cx - 238, y: 489 });
+      drawLandmark(icon, landmark, 1);
+      icon.setScale(0.75);
+      label(this, cx + 30, 489, t(`fact_${landmark}` as TextKey), { size: 20, color: C.ink, strokeThickness: 0, wrap: 440 });
     }
 
     // Buttons
