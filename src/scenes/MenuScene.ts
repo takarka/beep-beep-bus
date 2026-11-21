@@ -57,7 +57,7 @@ export class MenuScene extends Phaser.Scene {
     const env = currentEnv();
     this.backdrop = createScenery(this, env, { behindUi: true });
 
-    const title = label(this, GAME_W / 2, 118, t('title'), { size: 92, color: C.yellow, strokeThickness: 14 });
+    const title = label(this, GAME_W / 2, 132, t('title'), { size: 84, color: C.yellow, strokeThickness: 14 });
     this.tweens.add({ targets: title, angle: { from: -2, to: 2 }, yoyo: true, repeat: -1, duration: 1400, ease: 'Sine.easeInOut' });
 
     const saved = loadDesign();
@@ -97,12 +97,12 @@ export class MenuScene extends Phaser.Scene {
 
     // Language badges
     LANGS.forEach((lang, i) => {
-      const b = new Button(this, 80 + i * 124, 52, {
-        w: 104,
-        h: 60,
+      const b = new Button(this, 64 + i * 100, 46, {
+        w: 88,
+        h: 52,
         color: getSettings().lang === lang ? C.yellow : C.cream,
         text: DICTS[lang].langBadge,
-        textSize: 26,
+        textSize: 22,
         onClick: () => {
           updateSettings({ lang });
           this.scene.restart();

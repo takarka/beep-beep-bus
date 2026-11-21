@@ -242,8 +242,9 @@ export class LaneTraffic {
         const next = list[list.indexOf(e) + 1];
         if (next && (!leader || next.x < leader.x)) leader = next;
       }
+      const ambCruise = veh.kind === 'ambulance' ? Math.max(veh.cruise, player ? player.v + 95 : 0, 380) : veh.cruise;
       let target = targetSpeed({
-        cruise: veh.cruise * (veh.lane === 1 ? 1.18 : 1), // in the passing lane a driver speeds up to get by
+        cruise: ambCruise * (veh.lane === 1 ? 1.18 : 1), // in the passing lane a driver speeds up to get by
         v: veh.v,
         front: -(veh.x + veh.len / 2),
         leaderRear: leader ? -(leader.x - leader.len / 2) : null,
@@ -416,7 +417,7 @@ export class LaneTraffic {
       }
     }
     this.vehicles = this.vehicles.filter((v) => {
-      const gone = v.x < scrollX - 1500 || v.x > scrollX + GAME_W + 2600 || (v.leaving && v.view.alpha <= 0.02);
+      const gone = v.x < scrollX - 1500 || (!v.parked && v.x > scrollX + GAME_W + 2600) || (v.leaving && v.view.alpha <= 0.02);
       if (gone) {
         this.scene.tweens.killTweensOf(v.view);
         v.view.destroy();
