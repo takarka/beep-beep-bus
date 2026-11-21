@@ -396,40 +396,52 @@ describe('player lane changes', () => {
   });
 });
 
-import { crosswalkCountFor, stopSignCountFor } from '../src/core/level';
+import { childrenCountFor, crosswalkCountFor, parkedCountFor, stopSignCountFor } from '../src/core/level';
+import { childrenZoneResult } from '../src/core/rules';
 
-describe('uncontrolled crosswalks and STOP signs', () => {
+describe('uncontrolled crosswalks, STOP signs, parked cars and children signs', () => {
   it('none on level 1, then appear deterministically and stay well away from other stops/lights/stations/bumps', () => {
     expect(crosswalkCountFor(1)).toBe(0);
     expect(stopSignCountFor(1)).toBe(0);
     expect(stopSignCountFor(2)).toBe(0);
+    expect(parkedCountFor(2)).toBe(0);
+    expect(childrenCountFor(3)).toBe(0);
     expect(generateLevel(1).crosswalks).toEqual([]);
     expect(generateLevel(1).stopSigns).toEqual([]);
     expect(generateLevel(2).stopSigns).toEqual([]);
+    expect(generateLevel(2).parked).toEqual([]);
+    expect(generateLevel(3).children).toEqual([]);
 
     for (let l = 2; l <= 12; l++) {
       const lvl = generateLevel(l);
       expect(lvl.crosswalks).toHaveLength(crosswalkCountFor(l));
       expect(lvl.stopSigns).toHaveLength(stopSignCountFor(l));
+      expect(lvl.parked).toHaveLength(parkedCountFor(l));
+      expect(lvl.children).toHaveLength(childrenCountFor(l));
       expect(lvl.crosswalks).toEqual(generateLevel(l).crosswalks);
       expect(lvl.stopSigns).toEqual(generateLevel(l).stopSigns);
+      expect(lvl.parked).toEqual(generateLevel(l).parked);
+      expect(lvl.children).toEqual(generateLevel(l).children);
 
       const spots = lvl.items.map((i) => (i.kind === 'stop' ? i.zoneEnd : i.lineX));
-      const others = [...spots, ...lvl.stations, ...lvl.bumps];
-      for (const cx of lvl.crosswalks) {
-        for (const o of others) expect(Math.abs(cx - o)).toBeGreaterThan(700);
-        for (const sx of lvl.stopSigns) expect(Math.abs(cx - sx)).toBeGreaterThan(700);
-      }
-      for (const sx of lvl.stopSigns) {
-        for (const o of others) expect(Math.abs(sx - o)).toBeGreaterThan(700);
+      const all = [...spots, ...lvl.stations, ...lvl.bumps, ...lvl.crosswalks, ...lvl.stopSigns, ...lvl.parked, ...lvl.children];
+      for (let i = 0; i < all.length; i++) {
+        for (let j = i + 1; j < all.length; j++) {
+          expect(Math.abs(all[i]! - all[j]!)).toBeGreaterThan(700);
+        }
       }
     }
   });
 
-  it('reward yielding/stopping and penalize running across', () => {
+  it('reward yielding/stopping/careful driving and penalize running across or speeding', () => {
     expect(POINTS.yielded).toBeGreaterThan(0);
     expect(POINTS.stopSign).toBeGreaterThan(0);
+    expect(POINTS.carefulChildren).toBeGreaterThan(0);
     expect(POINTS.ranCrosswalk).toBeLessThan(0);
     expect(POINTS.ranStopSign).toBeLessThan(0);
+    expect(POINTS.fastChildren).toBeLessThan(0);
+    expect(childrenZoneResult(100)).toBe('gentle');
+    expect(childrenZoneResult(200)).toBe('ok');
+    expect(childrenZoneResult(300)).toBe('fast');
   });
 });

@@ -443,3 +443,27 @@ export function drawRoadStopSign(g: G, x: number, y: number, r: number): void {
   g.lineStyle(Math.max(2, r * 0.1), C.cream, 1);
   g.strokePoints(inner, true, true);
 }
+
+/** Triangular warning sign with two little running children. */
+export function drawChildrenSign(g: G, x: number, y: number, r: number): void {
+  const pts = [
+    { x, y: y - r },
+    { x: x + r * 0.96, y: y + r * 0.78 },
+    { x: x - r * 0.96, y: y + r * 0.78 },
+  ];
+  g.fillStyle(C.cream, 1);
+  g.lineStyle(Math.max(4, r * 0.18), C.red, 1);
+  g.fillPoints(pts, true);
+  g.strokePoints(pts, true, true);
+  // two silhouettes inside
+  g.fillStyle(C.ink, 1);
+  g.fillCircle(x - r * 0.2, y - r * 0.05, r * 0.13);
+  g.fillCircle(x + r * 0.22, y + r * 0.05, r * 0.11);
+  g.lineStyle(Math.max(2, r * 0.11), C.ink, 1);
+  g.lineBetween(x - r * 0.2, y + r * 0.08, x - r * 0.2, y + r * 0.36);
+  g.lineBetween(x - r * 0.2, y + r * 0.34, x - r * 0.36, y + r * 0.58);
+  g.lineBetween(x - r * 0.2, y + r * 0.34, x - r * 0.04, y + r * 0.58);
+  g.lineBetween(x + r * 0.22, y + r * 0.16, x + r * 0.22, y + r * 0.42);
+  g.lineBetween(x + r * 0.22, y + r * 0.4, x + r * 0.08, y + r * 0.58);
+  g.lineBetween(x + r * 0.22, y + r * 0.4, x + r * 0.38, y + r * 0.58);
+}

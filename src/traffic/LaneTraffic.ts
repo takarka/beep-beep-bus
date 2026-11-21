@@ -50,6 +50,7 @@ interface LaneVehicle {
   /** Distance still to drive before it turns into a side street. */
   life: number;
   leaving: boolean;
+  parked?: boolean;
 }
 
 export interface SignalState {
@@ -97,7 +98,7 @@ export class LaneTraffic {
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly opts: { night: boolean; level: number; bumps: readonly number[] },
+    private readonly opts: { night: boolean; level: number; bumps: readonly number[]; parked?: readonly number[] },
   ) {
     this.plan = lanePlan(opts.level);
     this.zones = bumpZones(opts.bumps, true);
@@ -109,10 +110,20 @@ export class LaneTraffic {
     return this.plan.enabled;
   }
 
-  /** One vehicle already ahead of us at the start, so the road is not empty. */
+  /** One vehicle already ahead of us at the start, plus any parked cars on the route. */
   prewarm(playerX: number): void {
+    for (const px of this.opts.parked ?? []) this.spawnParked(px);
     if (!this.plan.enabled) return;
     this.spawn(playerX + 1100 + this.rng() * 500);
+  }
+
+  private spawnParked(x: number): void {
+    const v = this.spawn(x, 0, 'car');
+    v.parked = true;
+    v.driver = 'careful';
+    v.v = 0;
+    v.cruise = 0;
+    v.life = Infinity;
   }
 
   /** The nearest vehicle in front of x in the lane(s) our bus occupies: the gap to its rear and its speed. */
@@ -128,10 +139,10 @@ export class LaneTraffic {
     return best ? { gap: best.x - best.len / 2 - frontX, v: best.v } : null;
   }
 
-  private spawn(x: number, lane: 0 | 1 = 0): LaneVehicle {
+  private spawn(x: number, lane: 0 | 1 = 0, forceKind?: LaneKind): LaneVehicle {
     const y = lane === 0 ? LANE_Y.main : LANE_Y.passing;
     const roll = this.rng();
-    const kind: LaneKind = roll < 0.6 ? 'car' : roll < 0.8 ? 'minibus' : 'bus';
+    const kind: LaneKind = forceKind ?? (roll < 0.6 ? 'car' : roll < 0.8 ? 'minibus' : 'bus');
     const hasty: Driver = kind !== 'bus' && this.rng() < this.plan.hastyChance ? 'hasty' : 'careful';
     let view: VehicleView | BusView;
     let len: number;
@@ -209,6 +220,10 @@ export class LaneTraffic {
 
     for (const e of ents) {
       const veh = e.ref!;
+      if (veh.parked) {
+        veh.v = 0;
+        continue;
+      }
       const d = DRIVERS[veh.driver];
       // the nearest vehicle ahead, in whichever lane(s) this one occupies
       let leader: Ent | null = null;
@@ -247,6 +262,11 @@ export class LaneTraffic {
     }
 
     for (const v of this.vehicles) {
+      if (v.parked) {
+        v.v = 0;
+        v.view.setBlinker(true, this.scene.time.now);
+        continue;
+      }
       const dx = v.v * dt;
       const before = v.x;
       v.x += dx;
@@ -284,6 +304,10 @@ export class LaneTraffic {
       }
     }
     for (const v of solid) {
+      if (v.parked) {
+        v.v = 0;
+        continue;
+      }
       const b = bodyOf.get(v)!;
       v.x = b.x;
       v.v = b.v;
@@ -349,7 +373,7 @@ export class LaneTraffic {
   private leaveAndSpawn(dt: number, scrollX: number, player: PlayerBody | null): void {
     for (const v of this.vehicles) {
       // Turn into a side street (only when it is not hemmed in right behind us).
-      if (!v.leaving && v.life <= 0 && v.stall <= 0) {
+      if (!v.parked && !v.leaving && v.life <= 0 && v.stall <= 0) {
         v.leaving = true;
         this.scene.tweens.add({ targets: v.view, y: v.y + 80, alpha: 0, angle: 0, duration: 900, ease: 'Sine.easeIn' });
       }

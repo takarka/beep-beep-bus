@@ -66,8 +66,8 @@
 ## 🚀 Version 0.3: more gameplay
 
 - [x] Pedestrians at crossings without a traffic light (you must stop and let them pass)
-- [x] **STOP sign**, speed bumps (remaining: "children" sign)
-- [ ] Parked cars, a bot bus that stops at the bus stops too
+- [x] **STOP sign**, "children" sign, speed bumps
+- [x] Parked cars (remaining: a bot bus that stops at the bus stops too)
 - [ ] Oncoming drivers overtaking each other
 - [ ] More vehicle types (taxi, truck, ambulance that you must let pass)
 - [ ] Evening / sunrise, fog, wipers

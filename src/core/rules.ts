@@ -24,6 +24,10 @@ export const POINTS = {
   stopSign: 5,
   /** Drove past a STOP sign without stopping. */
   ranStopSign: -10,
+  /** Drove carefully past a "Children" sign. */
+  carefulChildren: 3,
+  /** Drove too fast past a "Children" sign. */
+  fastChildren: -5,
 } as const;
 
 /** This many mistakes in a row (with nothing good in between) bring the police siren. */
@@ -112,6 +116,16 @@ export function starsFor(mistakes: number): 1 | 2 | 3 {
 
 /** Speed bumps ("sleeping policemen"): how fast is too fast, world px/s. */
 export const BUMP = { gentle: 130, hard: 230 } as const;
+
+/** "Children" warning zone: slow down past the sign. */
+export const CHILDREN = { gentle: 165, fast: 235 } as const;
+
+export function childrenZoneResult(v: number): 'gentle' | 'ok' | 'fast' {
+  const speed = Math.max(0, v);
+  if (speed <= CHILDREN.gentle) return 'gentle';
+  if (speed <= CHILDREN.fast) return 'ok';
+  return 'fast';
+}
 
 export type BumpKind = 'gentle' | 'bump' | 'hard';
 

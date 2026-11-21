@@ -21,14 +21,14 @@ import {
 } from '../core/rules';
 import { TrafficLightModel, type LightState } from '../core/traffic';
 import { t, type TextKey } from '../i18n';
-import { Icons, drawCrosswalkSign, drawMiniLight, drawRoadStopSign, drawStar, drawStopSign } from '../ui/draw';
+import { Icons, drawChildrenSign, drawCrosswalkSign, drawMiniLight, drawRoadStopSign, drawStar, drawStopSign } from '../ui/draw';
 import { GROUND_Y, PASSENGER_VARIANTS, SIDEWALK_FEET_Y, STREET_Y } from '../ui/textures';
 import { createScenery } from '../ui/scenery';
 import { landmarkForLevel } from '../core/campaign';
 import { drawLandmark } from '../ui/landmarks';
 import { drawLandmarkBig } from '../ui/landmarkScenes';
 import { TrafficManager } from '../traffic/TrafficManager';
-import { BUMP, LOW_FUEL, MAX_FUEL, MAX_HEALTH, NITRO, bumpDamage, bumpResult, conditionOf, crashDamage, fuelPerformance, fuelUse, nitroStep, performanceFor, repairPlan } from '../core/rules';
+import { BUMP, CHILDREN, LOW_FUEL, MAX_FUEL, MAX_HEALTH, NITRO, bumpDamage, bumpResult, childrenZoneResult, conditionOf, crashDamage, fuelPerformance, fuelUse, nitroStep, performanceFor, repairPlan } from '../core/rules';
 import { LaneTraffic, type LaneCrash } from '../traffic/LaneTraffic';
 import { Crossing, depthForY } from '../traffic/Crossing';
 import { createLaneMotion, startLaneChange, stepLaneChange, type LaneIndex, type LaneMotion } from '../traffic/lanes';
@@ -157,6 +157,8 @@ export class DriveScene extends Phaser.Scene {
   private streaks: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
   /** Speed bumps the bus has already driven over. */
   private bumpsDone = new Set<number>();
+  private childrenDone = new Set<number>();
+  private childrenHinted = new Set<number>();
   /** Seconds the bus is still shaken after hitting somebody (no gas). */
   private stun = 0;
   private crashCooldown = 0;
@@ -197,6 +199,8 @@ export class DriveScene extends Phaser.Scene {
     this.stun = 0;
     this.crashCooldown = 0;
     this.bumpsDone = new Set<number>();
+    this.childrenDone = new Set<number>();
+    this.childrenHinted = new Set<number>();
     const status = loadBusStatus();
     this.health = status.health;
     this.smoke = null;
@@ -237,7 +241,7 @@ export class DriveScene extends Phaser.Scene {
     this.updateSmoke();
     this.traffic = new TrafficManager(this, { night: env.time === 'night', level: this.level.level, bumps: this.level.bumps });
     this.traffic.prewarm(Phaser.Math.Clamp(START_X - this.camLead, 0, this.level.length - GAME_W));
-    this.lane = new LaneTraffic(this, { night: env.time === 'night', level: this.level.level, bumps: this.level.bumps });
+    this.lane = new LaneTraffic(this, { night: env.time === 'night', level: this.level.level, bumps: this.level.bumps, parked: this.level.parked });
     this.lane.prewarm(START_X);
     this.bus.setPassengers(0);
 
@@ -250,6 +254,7 @@ export class DriveScene extends Phaser.Scene {
     this.level.bumps.forEach((bx) => this.createBump(bx));
     this.level.crosswalks.forEach((cx) => this.createCrosswalk(cx));
     this.level.stopSigns.forEach((sx) => this.createStopSign(sx));
+    this.level.children.forEach((cx) => this.createChildrenSign(cx));
     this.level.stations.forEach((sx) => this.createStation(sx));
     this.createFinish(env.time === 'night');
     this.createHud();
@@ -386,6 +391,16 @@ export class DriveScene extends Phaser.Scene {
     label(this, sx, 515, 'STOP', { size: 17, color: C.cream, strokeThickness: 0 }).setDepth(21);
 
     this.stopSigns.push({ lineX: x, stopped: false, hold: 0, hinted: false, penalty: false });
+  }
+
+  /** Triangular "Children" sign on the near sidewalk: slow down as you pass. */
+  private createChildrenSign(x: number): void {
+    const sign = this.add.graphics().setDepth(20);
+    sign.fillStyle(0x4a4650, 1);
+    sign.lineStyle(3, C.ink, 1);
+    sign.fillRect(x - 4, 584, 8, SIDEWALK_FEET_Y + 4 - 584);
+    sign.strokeRect(x - 4, 584, 8, SIDEWALK_FEET_Y + 4 - 584);
+    drawChildrenSign(sign, x, 554, 34);
   }
 
   private drawLamps(rt: LightRt): void {
@@ -1434,6 +1449,9 @@ export class DriveScene extends Phaser.Scene {
     // "Helper" mode: the bus brakes by itself before red lights and bus stops, and pulls back to the curb lane for stops.
     if (this.assist && this.phase === 'driving') {
       const f0 = this.bus.frontWorldX();
+      if (this.busLane.lane === 0 && this.level.parked.some((px) => px - f0 > -40 && px - f0 < 650)) {
+        this.requestLane(1);
+      }
       if (this.busLane.lane === 1) {
         const stopSoon = this.stops.some((s) => s.state === 'waiting' && s.data.zoneEnd - f0 > -40 && s.data.zoneEnd - f0 < 750);
         const stSoon =
@@ -1554,6 +1572,7 @@ export class DriveScene extends Phaser.Scene {
     this.updateLights(dt, prevFront, front, gas);
     this.updateCrosswalks(dt, prevFront, front, gas);
     this.updateStopSigns(dt, prevFront, front, gas);
+    this.updateChildrenSigns(prevFront, front);
     this.updateStops(dt, front, gas);
     this.updateStations(dt, front, gas);
 
@@ -1588,6 +1607,12 @@ export class DriveScene extends Phaser.Scene {
         const target = st.zoneEnd - 70;
         if (front <= target + 4 && target - front <= d) return true;
       }
+    }
+    for (const cx of this.level.children) {
+      if (this.childrenDone.has(cx)) continue;
+      const dist = cx - front;
+      if (dist < -10 || dist > 650) continue;
+      if (this.v > Math.sqrt((CHILDREN.gentle - 15) ** 2 + 2 * PHYSICS.brake * Math.max(0, dist - 20))) return true;
     }
     // Speed bumps: be down to a gentle speed when the front wheels get there.
     // (It is the front axle that hits the bump, a good way behind the nose of the bus.)
@@ -1703,6 +1728,26 @@ export class DriveScene extends Phaser.Scene {
         s.penalty = true;
         this.mistake(t('ranStopSign'), POINTS.ranStopSign, this.bus.x);
         this.cameras.main.flash(200, 230, 57, 70);
+      }
+    }
+  }
+
+  private updateChildrenSigns(prevFront: number, front: number): void {
+    for (const cx of this.level.children) {
+      if (!this.childrenHinted.has(cx) && front < cx && cx - front < 700) {
+        this.childrenHinted.add(cx);
+        this.showBanner(t('childrenSign'), C.orange, 1700, (g) => drawChildrenSign(g, 0, 0, 26));
+      }
+      if (!this.childrenDone.has(cx) && prevFront < cx && front >= cx) {
+        this.childrenDone.add(cx);
+        const res = childrenZoneResult(this.v);
+        if (res === 'gentle') {
+          this.award(POINTS.carefulChildren, this.bus.x);
+          audio.reward();
+          this.showBanner(t('careful'), C.green, 1300, (g) => drawStar(g, 0, 0, 26, C.yellow, C.ink, 3));
+        } else if (res === 'fast') {
+          this.mistake(t('tooFast'), POINTS.fastChildren, cx);
+        }
       }
     }
   }
