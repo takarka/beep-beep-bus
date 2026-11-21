@@ -59,7 +59,7 @@
 ## 🔜 Version 0.2: mobile and polish (remaining)
 
 - [ ] Phone testing: button sizes, safe areas (notch), fullscreen on the first tap
-- [ ] **Voice prompts** in three languages (recorded files: "Stop!", "Bus stop!", "Well done!")
+- [x] **Voice prompts** in three languages ("Stop!", "Bus stop!", "Well done!", etc. via Web Speech API with toggle)
 - [ ] Parent settings (behind a "hold for 3 seconds" gate): difficulty, reset progress
 - [x] Animated passengers (walking, waving), a speech bubble with an icon of where they're going
 

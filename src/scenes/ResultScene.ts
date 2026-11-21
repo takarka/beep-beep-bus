@@ -31,6 +31,8 @@ export class ResultScene extends Phaser.Scene {
     this.cameras.main.fadeIn(300, 45, 42, 50);
     this.scroll = 0;
     const env = { ...resolveEnv(r.level, getSettings().world), city: cityForLevel(r.level) };
+    audio.setMusicTheme('menu', { night: env.time === 'night' });
+    audio.setMusicIntensity(0.35);
     this.backdrop = createScenery(this, env, { behindUi: true });
     const health = r.health ?? 100;
     const stars = finalStars(r.mistakes, health);

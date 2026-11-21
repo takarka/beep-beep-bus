@@ -1,7 +1,20 @@
+import type { BodyType } from '../bus/design';
+import {
+  MUSIC_THEMES,
+  midiToHz,
+  stepBass,
+  stepChord,
+  stepNote,
+  type MusicTheme,
+  type MusicThemeId,
+} from './musicThemes';
+
 /**
  * All game sounds are synthesised with the Web Audio API — no audio files needed.
  * Browsers only allow audio after a user gesture, so `unlock()` is called on the
- * first tap/click (see main.ts). Calls before that are silently ignored.
+ * first tap/click (see main.ts). Calls before that are silently ignored, except
+ * persistent layers (music / engine / ambience) which remember their intent and
+ * start as soon as audio unlocks.
  */
 
 type Wave = OscillatorType;
@@ -14,35 +27,47 @@ interface ToneOpts {
   at?: number;
   slideTo?: number;
   attack?: number;
+  filterHz?: number;
 }
 
-const midi = (n: number): number => 440 * Math.pow(2, (n - 69) / 12);
+export type AmbienceKind = 'rain' | 'snow' | 'night';
 
-// Cheerful C-major pentatonic loop (eighth notes). 0 = rest.
-const MELODY = [
-  72, 0, 76, 79, 76, 0, 72, 74, 76, 0, 74, 72, 69, 0, 72, 0,
-  72, 0, 76, 79, 81, 0, 79, 76, 74, 0, 76, 74, 72, 0, 0, 0,
-];
-const BASS = [48, 48, 45, 45, 41, 41, 43, 43];
+const HORN_PRESETS: Record<BodyType, { f1: number; f2: number; dur: number; gap: number; filter: number }> = {
+  city: { f1: 440, f2: 554, dur: 0.14, gap: 0.2, filter: 1250 },
+  bendy: { f1: 294, f2: 370, dur: 0.18, gap: 0.24, filter: 900 },
+  school: { f1: 349, f2: 440, dur: 0.16, gap: 0.22, filter: 1050 },
+  van: { f1: 587, f2: 740, dur: 0.11, gap: 0.17, filter: 1500 },
+};
 
 class AudioEngine {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
   private sfxBus!: GainNode;
   private musicBus!: GainNode;
+  private musicFilter!: BiquadFilterNode;
+  private musicDuck!: GainNode;
   private noiseBuf: AudioBuffer | null = null;
+  private visBound = false;
 
   private soundOn = true;
   private musicOn = true;
   private wantMusic = false;
+  private musicPaused = false;
+  private musicTheme: MusicTheme = MUSIC_THEMES.menu;
+  private musicNight = false;
+  private musicIntensity = 0.45;
   private musicTimer: number | null = null;
   private nextNoteTime = 0;
   private step = 0;
 
+  private wantEngine = false;
+  private lastEngineSpeed = 0;
+  private wantAmbience: AmbienceKind | null = null;
+
   private sirenNode: OscillatorNode | null = null;
   private nitroNode: OscillatorNode | null = null;
-  private rain: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
-  private engine: { osc: OscillatorNode; osc2: OscillatorNode; gain: GainNode } | null = null;
+  private ambience: { kind: AmbienceKind; src: AudioBufferSourceNode; gain: GainNode } | null = null;
+  private engine: { osc: OscillatorNode; osc2: OscillatorNode; filter: BiquadFilterNode; gain: GainNode } | null = null;
 
   configure(sound: boolean, music: boolean): void {
     this.soundOn = sound;
@@ -57,145 +82,239 @@ class AudioEngine {
         (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AC) return;
       this.ctx = new AC();
+
+      const comp = this.ctx.createDynamicsCompressor();
+      comp.threshold.value = -14;
+      comp.knee.value = 18;
+      comp.ratio.value = 4;
+      comp.attack.value = 0.005;
+      comp.release.value = 0.15;
+
       this.master = this.ctx.createGain();
-      this.master.connect(this.ctx.destination);
+      this.master.gain.value = 0.92;
+      this.master.connect(comp).connect(this.ctx.destination);
+
       this.sfxBus = this.ctx.createGain();
       this.sfxBus.connect(this.master);
+
       this.musicBus = this.ctx.createGain();
-      this.musicBus.connect(this.master);
+      this.musicFilter = this.ctx.createBiquadFilter();
+      this.musicFilter.type = 'lowpass';
+      this.musicFilter.frequency.value = this.musicNight ? 1300 : 5200;
+      this.musicDuck = this.ctx.createGain();
+      this.musicDuck.gain.value = 1;
+      this.musicBus.connect(this.musicFilter).connect(this.musicDuck).connect(this.master);
+
       this.applyGains();
+      this.bindVisibility();
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
     if (this.wantMusic) this.ensureMusicLoop();
+    if (this.wantEngine && !this.engine) {
+      this.createEngine();
+      this.setEngine(this.lastEngineSpeed);
+    }
+    if (this.wantAmbience && !this.ambience) {
+      this.createAmbience(this.wantAmbience);
+    }
+  }
+
+  private bindVisibility(): void {
+    if (this.visBound || typeof document === 'undefined') return;
+    this.visBound = true;
+    document.addEventListener('visibilitychange', () => {
+      if (!this.ctx) return;
+      if (document.hidden) {
+        if (this.ctx.state === 'running') void this.ctx.suspend();
+      } else {
+        if (this.ctx.state === 'suspended') {
+          void this.ctx.resume().then(() => {
+            if (this.ctx) this.nextNoteTime = this.ctx.currentTime + 0.12;
+          });
+        }
+      }
+    });
   }
 
   private applyGains(): void {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
-    this.master.gain.setTargetAtTime(this.soundOn ? 0.9 : 0, t, 0.02);
-    this.sfxBus.gain.setTargetAtTime(1, t, 0.02);
-    this.musicBus.gain.setTargetAtTime(this.musicOn ? 0.13 : 0, t, 0.05);
+    this.sfxBus.gain.setTargetAtTime(this.soundOn ? 1 : 0, t, 0.02);
+    const musicTarget = this.musicOn ? (this.musicPaused ? 0.06 : 0.15) : 0;
+    this.musicBus.gain.setTargetAtTime(musicTarget, t, 0.06);
   }
 
   private live(): AudioContext | null {
     return this.ctx && this.soundOn ? this.ctx : null;
   }
 
-  private tone({ freq, dur, type = 'sine', vol = 0.25, at = 0, slideTo, attack = 0.006 }: ToneOpts, dest?: AudioNode): void {
+  private ensureNoiseBuf(ctx: AudioContext): AudioBuffer {
+    if (!this.noiseBuf) {
+      this.noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+      const data = this.noiseBuf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    }
+    return this.noiseBuf;
+  }
+
+  private tone(
+    { freq, dur, type = 'sine', vol = 0.25, at = 0, slideTo, attack = 0.006, filterHz }: ToneOpts,
+    dest?: AudioNode,
+  ): void {
     const ctx = this.ctx;
     if (!ctx) return;
-    const t = ctx.currentTime + at;
+    const t = ctx.currentTime + Math.max(0, at);
     const o = ctx.createOscillator();
     const g = ctx.createGain();
     o.type = type;
     o.frequency.setValueAtTime(freq, t);
-    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t + dur);
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + attack);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + attack);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(dest ?? this.sfxBus);
+    const target = dest ?? this.sfxBus;
+    if (filterHz) {
+      const f = ctx.createBiquadFilter();
+      f.type = 'lowpass';
+      f.frequency.setValueAtTime(filterHz, t);
+      o.connect(f).connect(g).connect(target);
+    } else {
+      o.connect(g).connect(target);
+    }
     o.start(t);
     o.stop(t + dur + 0.05);
   }
 
-  private noise(dur: number, vol: number, freq: number, at = 0, slideTo?: number): void {
+  private noise(dur: number, vol: number, freq: number, at = 0, slideTo?: number, dest?: AudioNode, q = 1): void {
     const ctx = this.ctx;
     if (!ctx) return;
-    if (!this.noiseBuf) {
-      this.noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-      const data = this.noiseBuf.getChannelData(0);
-      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-    }
-    const t = ctx.currentTime + at;
+    const buf = this.ensureNoiseBuf(ctx);
+    const t = ctx.currentTime + Math.max(0, at);
     const src = ctx.createBufferSource();
-    src.buffer = this.noiseBuf;
+    src.buffer = buf;
     const f = ctx.createBiquadFilter();
     f.type = 'bandpass';
+    f.Q.value = q;
     f.frequency.setValueAtTime(freq, t);
-    if (slideTo) f.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    if (slideTo) f.frequency.exponentialRampToValueAtTime(Math.max(40, slideTo), t + dur);
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), t + Math.min(0.025, dur * 0.25));
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    src.connect(f).connect(g).connect(this.sfxBus);
+    src.connect(f).connect(g).connect(dest ?? this.sfxBus);
     src.start(t);
     src.stop(t + dur + 0.05);
+  }
+
+  /** Temporarily ducks background music during fanfares or sirens. */
+  duck(factor: number, seconds: number): void {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.musicDuck.gain.cancelScheduledValues(t);
+    this.musicDuck.gain.setTargetAtTime(factor, t, 0.04);
+    this.musicDuck.gain.setTargetAtTime(1, t + seconds, 0.25);
   }
 
   // ---------- sound effects ----------
   click(): void {
     if (!this.live()) return;
-    this.tone({ freq: 700, dur: 0.07, type: 'square', vol: 0.06 });
+    this.tone({ freq: 640, dur: 0.045, type: 'triangle', vol: 0.14, slideTo: 420, attack: 0.003 });
   }
 
   select(): void {
     if (!this.live()) return;
-    this.tone({ freq: 523, dur: 0.1, type: 'triangle', vol: 0.25 });
-    this.tone({ freq: 784, dur: 0.16, type: 'triangle', vol: 0.25, at: 0.08 });
+    this.tone({ freq: 523, dur: 0.1, type: 'triangle', vol: 0.22 });
+    this.tone({ freq: 784, dur: 0.16, type: 'triangle', vol: 0.22, at: 0.07 });
   }
 
   pop(): void {
     if (!this.live()) return;
-    this.tone({ freq: 260, dur: 0.14, type: 'sine', vol: 0.3, slideTo: 900 });
+    this.tone({ freq: 260, dur: 0.14, type: 'sine', vol: 0.28, slideTo: 900 });
   }
 
-  horn(): void {
+  /** Bus horn tuned to the bus body type (warm filtered dual-tone). */
+  horn(body: BodyType = 'city'): void {
     if (!this.live()) return;
-    for (const at of [0, 0.2]) {
-      this.tone({ freq: 440, dur: 0.14, type: 'square', vol: 0.07, at, attack: 0.004 });
-      this.tone({ freq: 554, dur: 0.14, type: 'square', vol: 0.07, at, attack: 0.004 });
+    const p = HORN_PRESETS[body] ?? HORN_PRESETS.city;
+    for (const at of [0, p.gap]) {
+      this.tone({ freq: p.f1, dur: p.dur, type: 'sawtooth', vol: 0.11, at, attack: 0.005, filterHz: p.filter });
+      this.tone({ freq: p.f2, dur: p.dur, type: 'sawtooth', vol: 0.1, at, attack: 0.005, filterHz: p.filter });
     }
+  }
+
+  /** Soft pneumatic bus brake hiss when coming to a full stop. */
+  airBrake(): void {
+    if (!this.live()) return;
+    this.noise(0.26, 0.11, 2400, 0, 1050, this.sfxBus, 1.4);
+  }
+
+  /** Subtle rubbery wiper swish in rain. */
+  wiper(): void {
+    if (!this.live()) return;
+    this.noise(0.14, 0.032, 650, 0, 1150, this.sfxBus, 2.2);
   }
 
   doorOpen(): void {
     if (!this.live()) return;
-    this.noise(0.5, 0.35, 3000, 0, 900);
-    this.tone({ freq: 180, dur: 0.25, type: 'triangle', vol: 0.12, at: 0.15, slideTo: 120 });
+    this.noise(0.48, 0.3, 2800, 0, 900);
+    this.tone({ freq: 180, dur: 0.25, type: 'triangle', vol: 0.12, at: 0.14, slideTo: 120 });
   }
 
   doorClose(): void {
     if (!this.live()) return;
-    this.noise(0.3, 0.25, 1500, 0, 3000);
-    this.tone({ freq: 140, dur: 0.12, type: 'sine', vol: 0.3, at: 0.28 });
+    this.noise(0.3, 0.22, 1500, 0, 2800);
+    this.tone({ freq: 140, dur: 0.12, type: 'sine', vol: 0.28, at: 0.26 });
   }
 
   dingDong(): void {
     if (!this.live()) return;
-    this.tone({ freq: 880, dur: 0.6, type: 'sine', vol: 0.22 });
-    this.tone({ freq: 698, dur: 0.8, type: 'sine', vol: 0.22, at: 0.32 });
+    this.tone({ freq: 880, dur: 0.55, type: 'sine', vol: 0.2 });
+    this.tone({ freq: 698, dur: 0.75, type: 'sine', vol: 0.2, at: 0.3 });
   }
 
   coin(): void {
     if (!this.live()) return;
-    this.tone({ freq: 988, dur: 0.08, type: 'square', vol: 0.07 });
-    this.tone({ freq: 1319, dur: 0.22, type: 'square', vol: 0.07, at: 0.08 });
+    this.tone({ freq: 988, dur: 0.09, type: 'triangle', vol: 0.16 });
+    this.tone({ freq: 1319, dur: 0.24, type: 'triangle', vol: 0.18, at: 0.07 });
+    this.tone({ freq: 2637, dur: 0.14, type: 'sine', vol: 0.05, at: 0.07 });
+  }
+
+  /** Extra cheerful chime when a passenger exits at their requested destination. */
+  destinationBonus(): void {
+    if (!this.live()) return;
+    const notes = [1047, 1319, 1568];
+    notes.forEach((f, i) => {
+      this.tone({ freq: f, dur: 0.22, type: 'triangle', vol: 0.19, at: i * 0.065 });
+      this.tone({ freq: f * 2, dur: 0.14, type: 'sine', vol: 0.05, at: i * 0.065 });
+    });
   }
 
   reward(): void {
     if (!this.live()) return;
     [523, 659, 784, 1047].forEach((f, i) =>
-      this.tone({ freq: f, dur: 0.18, type: 'triangle', vol: 0.25, at: i * 0.09 }),
+      this.tone({ freq: f, dur: 0.18, type: 'triangle', vol: 0.22, at: i * 0.085 }),
     );
   }
 
   oops(): void {
     if (!this.live()) return;
-    this.tone({ freq: 392, dur: 0.28, type: 'triangle', vol: 0.3, slideTo: 330 });
-    this.tone({ freq: 330, dur: 0.45, type: 'triangle', vol: 0.3, at: 0.3, slideTo: 196 });
+    this.tone({ freq: 392, dur: 0.26, type: 'triangle', vol: 0.26, slideTo: 330 });
+    this.tone({ freq: 330, dur: 0.42, type: 'triangle', vol: 0.26, at: 0.28, slideTo: 196 });
   }
 
   star(i: number): void {
     if (!this.live()) return;
-    this.tone({ freq: 660 * Math.pow(1.26, i), dur: 0.35, type: 'triangle', vol: 0.25 });
+    this.tone({ freq: 660 * Math.pow(1.26, i), dur: 0.35, type: 'triangle', vol: 0.24 });
     this.tone({ freq: 1320 * Math.pow(1.26, i), dur: 0.25, type: 'sine', vol: 0.08 });
   }
 
   fanfare(): void {
     if (!this.live()) return;
+    this.duck(0.35, 1.5);
     const notes = [67, 72, 76, 79, 76, 79, 84];
     const times = [0, 0.12, 0.24, 0.36, 0.54, 0.66, 0.8];
     notes.forEach((n, i) =>
-      this.tone({ freq: midi(n), dur: i === notes.length - 1 ? 0.6 : 0.16, type: 'triangle', vol: 0.25, at: times[i] }),
+      this.tone({ freq: midiToHz(n), dur: i === notes.length - 1 ? 0.6 : 0.16, type: 'triangle', vol: 0.24, at: times[i] }),
     );
   }
 
@@ -203,17 +322,20 @@ class AudioEngine {
   nitroOn(): void {
     const ctx = this.live();
     if (!ctx || this.nitroNode) return;
-    this.tone({ freq: 160, dur: 0.35, type: 'sawtooth', vol: 0.18, slideTo: 620 });
+    this.tone({ freq: 160, dur: 0.35, type: 'sawtooth', vol: 0.15, slideTo: 620, filterHz: 1400 });
     const osc = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 650;
     const gain = ctx.createGain();
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(110, ctx.currentTime);
     osc.frequency.linearRampToValueAtTime(190, ctx.currentTime + 0.4);
-    gain.gain.value = 0.06;
-    osc.connect(gain).connect(this.sfxBus);
+    gain.gain.value = 0.055;
+    osc.connect(filter).connect(gain).connect(this.sfxBus);
     osc.start();
     this.nitroNode = osc;
-    this.noise(1.2, 0.2, 1200, 0, 3500);
+    this.noise(1.2, 0.18, 1200, 0, 3400);
   }
 
   nitroOff(): void {
@@ -234,46 +356,48 @@ class AudioEngine {
   /** The "low fuel" warning: two quick beeps. */
   lowFuel(): void {
     if (!this.live()) return;
-    for (const at of [0, 0.22]) this.tone({ freq: 880, dur: 0.14, type: 'triangle', vol: 0.22, at });
+    for (const at of [0, 0.22]) this.tone({ freq: 880, dur: 0.14, type: 'triangle', vol: 0.2, at });
   }
 
   /** Petrol gurgling into the tank. */
   fuel(): void {
     if (!this.live()) return;
-    this.noise(1.6, 0.18, 500, 0, 900);
-    for (let i = 0; i < 6; i++) this.tone({ freq: 300 + i * 70, dur: 0.1, type: 'sine', vol: 0.12, at: 0.12 + i * 0.22, slideTo: 520 + i * 70 });
+    this.noise(1.6, 0.16, 500, 0, 900);
+    for (let i = 0; i < 6; i++) {
+      this.tone({ freq: 300 + i * 70, dur: 0.1, type: 'sine', vol: 0.12, at: 0.12 + i * 0.22, slideTo: 520 + i * 70 });
+    }
   }
 
   /** Clanking of tools while the bus is mended. */
   repair(): void {
     if (!this.live()) return;
     for (let i = 0; i < 5; i++) {
-      this.tone({ freq: 900, dur: 0.09, type: 'square', vol: 0.08, at: i * 0.3, slideTo: 380 });
-      this.noise(0.07, 0.12, 2500, i * 0.3 + 0.01, 900);
+      this.tone({ freq: 900, dur: 0.09, type: 'triangle', vol: 0.12, at: i * 0.3, slideTo: 380 });
+      this.noise(0.07, 0.11, 2500, i * 0.3 + 0.01, 900);
     }
   }
 
   /** A worn-out engine coughs. */
   cough(): void {
     if (!this.live()) return;
-    this.tone({ freq: 70, dur: 0.18, type: 'sawtooth', vol: 0.25, slideTo: 40 });
-    this.noise(0.14, 0.2, 700, 0.02, 200);
-    this.tone({ freq: 62, dur: 0.14, type: 'sawtooth', vol: 0.2, at: 0.2, slideTo: 38 });
+    this.tone({ freq: 70, dur: 0.18, type: 'sawtooth', vol: 0.22, slideTo: 40, filterHz: 350 });
+    this.noise(0.14, 0.18, 700, 0.02, 200);
+    this.tone({ freq: 62, dur: 0.14, type: 'sawtooth', vol: 0.18, at: 0.2, slideTo: 38, filterHz: 320 });
   }
 
   /** The wheels thump over a speed bump; harder (`power` 0..1) = deeper and louder. */
   bump(power: number): void {
     if (!this.live()) return;
-    this.tone({ freq: 140 - 60 * power, dur: 0.16 + 0.12 * power, type: 'sine', vol: 0.18 + 0.4 * power, slideTo: 50 });
-    this.noise(0.1 + 0.1 * power, 0.1 + 0.3 * power, 500, 0.08, 150);
+    this.tone({ freq: 140 - 60 * power, dur: 0.16 + 0.12 * power, type: 'sine', vol: 0.18 + 0.38 * power, slideTo: 50 });
+    this.noise(0.1 + 0.1 * power, 0.1 + 0.28 * power, 500, 0.08, 150);
   }
 
   crash(): void {
     if (!this.live()) return;
-    this.noise(0.45, 0.6, 1800, 0, 250);
-    this.tone({ freq: 95, dur: 0.35, type: 'sine', vol: 0.55, slideTo: 45 });
-    this.tone({ freq: 420, dur: 0.12, type: 'square', vol: 0.1, slideTo: 160 });
-    this.tone({ freq: 310, dur: 0.2, type: 'sawtooth', vol: 0.07, at: 0.06, slideTo: 120 });
+    this.noise(0.45, 0.55, 1800, 0, 250);
+    this.tone({ freq: 95, dur: 0.35, type: 'sine', vol: 0.5, slideTo: 45 });
+    this.tone({ freq: 420, dur: 0.12, type: 'sawtooth', vol: 0.09, slideTo: 160, filterHz: 1100 });
+    this.tone({ freq: 310, dur: 0.2, type: 'sawtooth', vol: 0.07, at: 0.06, slideTo: 120, filterHz: 900 });
   }
 
   /** Police siren: a rising and falling wail. Stops by itself after `seconds`. */
@@ -281,6 +405,7 @@ class AudioEngine {
     const ctx = this.live();
     if (!ctx) return;
     this.stopSiren();
+    this.duck(0.42, seconds);
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = 'triangle';
@@ -292,7 +417,33 @@ class AudioEngine {
     }
     gain.gain.setValueAtTime(0.0001, t0);
     gain.gain.exponentialRampToValueAtTime(0.11, t0 + 0.05);
-    gain.gain.setValueAtTime(0.11, t0 + seconds - 0.12);
+    gain.gain.setValueAtTime(0.11, t0 + Math.max(0.1, seconds - 0.12));
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + seconds);
+    osc.connect(gain).connect(this.sfxBus);
+    osc.start(t0);
+    osc.stop(t0 + seconds + 0.05);
+    this.sirenNode = osc;
+  }
+
+  /** Ambulance two-tone siren (dee-dah-dee-dah), distinct from the police wail. */
+  ambulanceSiren(seconds = 1.8): void {
+    const ctx = this.live();
+    if (!ctx) return;
+    this.stopSiren();
+    this.duck(0.45, seconds);
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    const t0 = ctx.currentTime;
+    const step = 0.36;
+    let hi = true;
+    for (let t = 0; t < seconds; t += step) {
+      osc.frequency.setValueAtTime(hi ? 880 : 660, t0 + t);
+      hi = !hi;
+    }
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(0.11, t0 + 0.04);
+    gain.gain.setValueAtTime(0.11, t0 + Math.max(0.1, seconds - 0.1));
     gain.gain.exponentialRampToValueAtTime(0.0001, t0 + seconds);
     osc.connect(gain).connect(this.sfxBus);
     osc.start(t0);
@@ -309,77 +460,140 @@ class AudioEngine {
     this.sirenNode = null;
   }
 
-  // ---------- rain ----------
-  startRain(): void {
+  // ---------- weather / world ambience ----------
+  startAmbience(kind: AmbienceKind): void {
+    if (this.wantAmbience === kind && this.ambience?.kind === kind) return;
+    this.stopAmbience();
+    this.wantAmbience = kind;
+    if (this.ctx) this.createAmbience(kind);
+  }
+
+  private createAmbience(kind: AmbienceKind): void {
     const ctx = this.ctx;
-    if (!ctx || this.rain) return;
-    if (!this.noiseBuf) {
-      this.noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-      const data = this.noiseBuf.getChannelData(0);
-      for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-    }
+    if (!ctx || this.ambience) return;
     const src = ctx.createBufferSource();
-    src.buffer = this.noiseBuf;
+    src.buffer = this.ensureNoiseBuf(ctx);
     src.loop = true;
-    const hp = ctx.createBiquadFilter();
-    hp.type = 'highpass';
-    hp.frequency.value = 1400;
-    const lp = ctx.createBiquadFilter();
-    lp.type = 'lowpass';
-    lp.frequency.value = 7000;
+
     const gain = ctx.createGain();
-    gain.gain.value = 0.05;
-    src.connect(hp).connect(lp).connect(gain).connect(this.sfxBus);
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+
+    if (kind === 'rain') {
+      const hp = ctx.createBiquadFilter();
+      hp.type = 'highpass';
+      hp.frequency.value = 1400;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 6500;
+      gain.gain.setTargetAtTime(0.045, ctx.currentTime, 0.25);
+      src.connect(hp).connect(lp).connect(gain).connect(this.sfxBus);
+    } else if (kind === 'snow') {
+      const bp = ctx.createBiquadFilter();
+      bp.type = 'bandpass';
+      bp.frequency.value = 420;
+      bp.Q.value = 1.6;
+      gain.gain.setTargetAtTime(0.028, ctx.currentTime, 0.35);
+      src.connect(bp).connect(gain).connect(this.sfxBus);
+    } else {
+      // Gentle night air
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 260;
+      gain.gain.setTargetAtTime(0.016, ctx.currentTime, 0.4);
+      src.connect(lp).connect(gain).connect(this.sfxBus);
+    }
+
     src.start();
-    this.rain = { src, gain };
+    this.ambience = { kind, src, gain };
+  }
+
+  stopAmbience(): void {
+    this.wantAmbience = null;
+    if (!this.ambience || !this.ctx) {
+      this.ambience = null;
+      return;
+    }
+    const { src, gain } = this.ambience;
+    gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1);
+    try {
+      src.stop(this.ctx.currentTime + 0.5);
+    } catch {
+      /* already stopped */
+    }
+    this.ambience = null;
+  }
+
+  startRain(): void {
+    this.startAmbience('rain');
   }
 
   stopRain(): void {
-    if (!this.rain || !this.ctx) return;
-    this.rain.gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1);
-    this.rain.src.stop(this.ctx.currentTime + 0.5);
-    this.rain = null;
+    this.stopAmbience();
   }
 
   // ---------- engine hum ----------
   startEngine(): void {
+    this.wantEngine = true;
+    this.lastEngineSpeed = 0;
+    if (this.ctx && !this.engine) this.createEngine();
+  }
+
+  private createEngine(): void {
     const ctx = this.ctx;
     if (!ctx || this.engine) return;
     const osc = ctx.createOscillator();
     const osc2 = ctx.createOscillator();
     osc.type = 'sawtooth';
-    osc2.type = 'square';
+    osc2.type = 'triangle';
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.value = 320;
+    filter.frequency.value = 180;
     const gain = ctx.createGain();
     gain.gain.value = 0;
     osc.connect(filter);
     osc2.connect(filter);
     filter.connect(gain).connect(this.sfxBus);
-    osc.frequency.value = 45;
-    osc2.frequency.value = 22.5;
+    osc.frequency.value = 44;
+    osc2.frequency.value = 22;
     osc.start();
     osc2.start();
-    this.engine = { osc, osc2, gain };
+    this.engine = { osc, osc2, filter, gain };
   }
 
-  /** speed01: 0 (idle) … 1 (full speed). */
+  /** speed01: 0 (idle) … 1 (full speed, up to 1.3 on nitro). */
   setEngine(speed01: number): void {
+    this.lastEngineSpeed = speed01;
     if (!this.ctx || !this.engine) return;
     const t = this.ctx.currentTime;
-    const f = 42 + speed01 * 75;
-    this.engine.osc.frequency.setTargetAtTime(f, t, 0.1);
-    this.engine.osc2.frequency.setTargetAtTime(f / 2, t, 0.1);
-    this.engine.gain.gain.setTargetAtTime(0.05 + speed01 * 0.06, t, 0.1);
+    const s = Math.max(0, Math.min(1.3, speed01));
+    // Soft 3-gear RPM curve: rises, dips slightly on upshift, rises again.
+    let rpm: number;
+    if (s < 0.35) rpm = s / 0.35;
+    else if (s < 0.72) rpm = 0.42 + ((s - 0.35) / 0.37) * 0.58;
+    else rpm = 0.54 + ((s - 0.72) / 0.58) * 0.66;
+
+    const f = 40 + rpm * 68;
+    const cutoff = 160 + s * 300;
+    this.engine.osc.frequency.setTargetAtTime(f, t, 0.08);
+    this.engine.osc2.frequency.setTargetAtTime(f / 2, t, 0.08);
+    this.engine.filter.frequency.setTargetAtTime(cutoff, t, 0.09);
+    this.engine.gain.gain.setTargetAtTime(0.042 + Math.min(1, s) * 0.055, t, 0.1);
   }
 
   stopEngine(): void {
-    if (!this.engine || !this.ctx) return;
+    this.wantEngine = false;
+    if (!this.engine || !this.ctx) {
+      this.engine = null;
+      return;
+    }
     const { osc, osc2, gain } = this.engine;
     gain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.05);
-    osc.stop(this.ctx.currentTime + 0.3);
-    osc2.stop(this.ctx.currentTime + 0.3);
+    try {
+      osc.stop(this.ctx.currentTime + 0.3);
+      osc2.stop(this.ctx.currentTime + 0.3);
+    } catch {
+      /* already stopped */
+    }
     this.engine = null;
   }
 
@@ -387,6 +601,29 @@ class AudioEngine {
   startMusic(): void {
     this.wantMusic = true;
     if (this.ctx) this.ensureMusicLoop();
+  }
+
+  setMusicTheme(id: MusicThemeId, opts?: { night?: boolean }): void {
+    const next = MUSIC_THEMES[id] ?? MUSIC_THEMES.menu;
+    const night = opts?.night ?? false;
+    const changed = next.id !== this.musicTheme.id;
+    this.musicTheme = next;
+    this.musicNight = night;
+    if (changed) this.step = 0;
+    if (this.ctx) {
+      this.musicFilter.frequency.setTargetAtTime(night ? 1300 : 5200, this.ctx.currentTime, 0.25);
+    }
+    this.startMusic();
+  }
+
+  /** 0 = calm/idle (menus, bus stop), 1 = energetic driving. */
+  setMusicIntensity(level: number): void {
+    this.musicIntensity = Math.max(0, Math.min(1, level));
+  }
+
+  setMusicPaused(paused: boolean): void {
+    this.musicPaused = paused;
+    this.applyGains();
   }
 
   private ensureMusicLoop(): void {
@@ -398,17 +635,101 @@ class AudioEngine {
   private scheduleMusic(): void {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== 'running') return;
-    const eighth = 60 / 128 / 2;
-    while (this.nextNoteTime < ctx.currentTime + 0.25) {
-      const at = this.nextNoteTime - ctx.currentTime;
-      const note = MELODY[this.step % MELODY.length]!;
-      if (note) this.tone({ freq: midi(note), dur: eighth * 1.6, type: 'triangle', vol: 0.5, at }, this.musicBus);
-      if (this.step % 4 === 0) {
-        const bass = BASS[Math.floor(this.step / 4) % BASS.length]!;
-        this.tone({ freq: midi(bass), dur: eighth * 3, type: 'sine', vol: 0.7, at }, this.musicBus);
+    // Prevent catch-up burst after long pause/backgrounding.
+    if (this.nextNoteTime < ctx.currentTime - 0.3) {
+      this.nextNoteTime = ctx.currentTime + 0.08;
+    }
+    const theme = this.musicTheme;
+    const bpm = this.musicNight ? theme.bpm * 0.92 : theme.bpm;
+    const eighth = 60 / bpm / 2;
+
+    while (this.nextNoteTime < ctx.currentTime + 0.24) {
+      const at = Math.max(0, this.nextNoteTime - ctx.currentTime);
+      const s = this.step;
+
+      // 1. Lead melody
+      const note = stepNote(theme, s);
+      if (note) {
+        this.tone(
+          {
+            freq: midiToHz(note),
+            dur: eighth * theme.leadGate,
+            type: theme.leadWave,
+            vol: 0.42,
+            at,
+            attack: 0.01,
+            filterHz: theme.leadFilterHz,
+          },
+          this.musicBus,
+        );
       }
-      if (this.step % 2 === 1) this.tone({ freq: 6000, dur: 0.03, type: 'square', vol: 0.03, at }, this.musicBus);
-      this.step++;
+
+      // 2. Bass line
+      const bass = stepBass(theme, s);
+      if (bass) {
+        this.tone(
+          {
+            freq: midiToHz(bass),
+            dur: eighth * 3.1,
+            type: theme.bassWave,
+            vol: 0.58,
+            at,
+            attack: 0.012,
+            filterHz: 600,
+          },
+          this.musicBus,
+        );
+      }
+
+      // 3. Soft chord pluck on off-beats
+      const chord = stepChord(theme, s);
+      if (chord) {
+        for (const cn of chord) {
+          this.tone(
+            {
+              freq: midiToHz(cn),
+              dur: eighth * 1.4,
+              type: 'sine',
+              vol: 0.13,
+              at,
+              attack: 0.015,
+            },
+            this.musicBus,
+          );
+        }
+      }
+
+      // 4. Gentle dynamic percussion (scales smoothly with driving intensity)
+      const perc = this.musicIntensity;
+      if (perc > 0.2) {
+        const pVol = (perc - 0.2) / 0.8;
+        const barStep = s % 8;
+        // Soft kick
+        const kickHit =
+          theme.percStyle === 'folk'
+            ? barStep === 0 || barStep === 3 || barStep === 6
+            : barStep === 0 || (theme.percStyle !== 'light' && barStep === 4);
+        if (kickHit) {
+          this.tone(
+            {
+              freq: 112,
+              dur: 0.09,
+              type: 'sine',
+              vol: 0.34 * pVol,
+              at,
+              slideTo: 42,
+              attack: 0.004,
+            },
+            this.musicBus,
+          );
+        }
+        // Airy shaker (filtered noise instead of harsh high square wave)
+        if (barStep % 2 === 1 && theme.percStyle !== 'light') {
+          this.noise(0.03, 0.09 * pVol, 5400, at, undefined, this.musicBus, 2.5);
+        }
+      }
+
+      this.step = (this.step + 1) % 64;
       this.nextNoteTime += eighth;
     }
   }

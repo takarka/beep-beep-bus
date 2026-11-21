@@ -37,7 +37,10 @@ export class GarageScene extends Phaser.Scene {
     this.cameras.main.fadeIn(200, 45, 42, 50);
     this.scrollX = 0;
     this.confirmSlot = null;
-    this.backdrop = createScenery(this, currentEnv(), { behindUi: true });
+    const env = currentEnv();
+    audio.setMusicTheme('menu', { night: env.time === 'night' });
+    audio.setMusicIntensity(0.35);
+    this.backdrop = createScenery(this, env, { behindUi: true });
     const garage = loadGarage();
 
     label(this, GAME_W / 2, 78, t("garage"), {

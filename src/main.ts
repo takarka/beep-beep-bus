@@ -2,6 +2,7 @@ import '@fontsource/rubik/700.css';
 import '@fontsource/rubik/800.css';
 import Phaser from 'phaser';
 import { audio } from './audio/AudioEngine';
+import { voice } from './audio/voice';
 import { C, GAME_H, GAME_W } from './config';
 import { getSettings, onSettingsChange } from './core/settings';
 import { BootScene } from './scenes/BootScene';
@@ -26,7 +27,11 @@ async function start(): Promise<void> {
 
   const s = getSettings();
   audio.configure(s.sound, s.music);
-  onSettingsChange((n) => audio.configure(n.sound, n.music));
+  voice.configure(s.voice, s.lang);
+  onSettingsChange((n) => {
+    audio.configure(n.sound, n.music);
+    voice.configure(n.voice, n.lang);
+  });
 
   // Browsers only allow audio after a user gesture.
   const unlock = () => audio.unlock();

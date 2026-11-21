@@ -91,6 +91,18 @@ export const Icons = {
       g.lineBetween(-s * 0.38, -s * 0.38, s * 0.38, s * 0.38);
     }
   },
+  voice(g: G, s: number, on: boolean, color: number = C.cream) {
+    // Speech bubble with little dots inside
+    g.fillStyle(color, 1);
+    g.fillRoundedRect(-s * 0.34, -s * 0.28, s * 0.68, s * 0.44, s * 0.14);
+    g.fillTriangle(-s * 0.14, s * 0.14, -s * 0.26, s * 0.34, s * 0.04, s * 0.14);
+    g.fillStyle(C.ink, 0.75);
+    for (const dx of [-0.15, 0, 0.15]) g.fillCircle(s * dx, -s * 0.06, s * 0.045);
+    if (!on) {
+      g.lineStyle(s * 0.08, C.red, 1);
+      g.lineBetween(-s * 0.38, -s * 0.38, s * 0.38, s * 0.38);
+    }
+  },
   retry(g: G, s: number, color: number = C.cream) {
     g.lineStyle(s * 0.12, color, 1);
     g.beginPath();

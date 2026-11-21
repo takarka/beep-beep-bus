@@ -337,6 +337,8 @@ export class MapScene extends Phaser.Scene {
 
   create(data?: { celebrate?: number; city?: CityId }): void {
     this.cameras.main.fadeIn(250, 45, 42, 50);
+    audio.setMusicTheme('menu');
+    audio.setMusicIntensity(0.45);
     this.nodes = [];
     this.moving = false;
     this.busy = false;
@@ -642,7 +644,7 @@ export class MapScene extends Phaser.Scene {
   private play(level: number): void {
     if (this.busy) return;
     this.busy = true;
-    audio.horn();
+    audio.horn((loadDesign() ?? DEFAULT_DESIGN).body);
     this.cameras.main.fadeOut(250, 45, 42, 50);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Drive', { level }));
   }
@@ -699,7 +701,7 @@ export class MapScene extends Phaser.Scene {
       const road = this.add.graphics().setDepth(-3).setAlpha(0);
       drawRoad(road, curve, true);
       this.tweens.add({ targets: road, alpha: 1, duration: 1500 });
-      audio.horn();
+      audio.horn((loadDesign() ?? DEFAULT_DESIGN).body);
       this.moving = true;
       const prog = { t: 0 };
       this.tweens.killTweensOf(this.bus);
