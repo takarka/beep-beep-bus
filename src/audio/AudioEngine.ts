@@ -736,8 +736,10 @@ class AudioEngine {
   private scheduleMusic(): void {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== 'running') return;
-    // When an optional MP3 track is active for this theme, stay silent on the synth.
-    if (this.musicTrack && this.musicTrack.id === this.musicTheme.id) {
+    // Only fall back to the built-in synth if the MP3 track for this theme is confirmed missing.
+    // While it is loading or playing, keep the synth silent so the old music never bleeds through.
+    const state = this.musicCache.get(this.musicTheme.id);
+    if ((this.musicTrack && this.musicTrack.id === this.musicTheme.id) || state !== 'missing') {
       this.nextNoteTime = ctx.currentTime + 0.12;
       return;
     }
