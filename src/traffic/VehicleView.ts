@@ -31,12 +31,16 @@ export class VehicleView extends Phaser.GameObjects.Container {
     scene.add.existing(this);
     const shadow = scene.add.graphics();
     shadow.fillStyle(C.shadow, 0.18);
-    shadow.fillEllipse(0, 2, kind === 'minibus' ? 260 : 170, 14);
+    const shadowW = kind === 'truck' ? 270 : kind === 'minibus' ? 260 : kind === 'ambulance' ? 210 : 170;
+    shadow.fillEllipse(0, 2, shadowW, 14);
     this.add(shadow);
 
     if (kind === 'minibus') this.buildMinibus(color);
-    else this.buildCar(color, variant, kind === 'police');
-    if (night) this.addHeadlightBeam(kind === 'minibus' ? 114 : 76, -30);
+    else if (kind === 'truck') this.buildTruck(color);
+    else if (kind === 'ambulance') this.buildAmbulance();
+    else this.buildCar(color, variant, kind === 'police' ? 'police' : kind === 'taxi' ? 'taxi' : 'car');
+    const beamX = kind === 'truck' ? 118 : kind === 'minibus' ? 114 : kind === 'ambulance' ? 92 : 76;
+    if (night) this.addHeadlightBeam(beamX, -30);
     this.blinkerG = scene.add.graphics();
     this.add(this.blinkerG);
   }
@@ -59,8 +63,8 @@ export class VehicleView extends Phaser.GameObjects.Container {
     return g;
   }
 
-  private buildCar(color: number, variant: number, police: boolean): void {
-    const body = police ? POLICE_WHITE : color;
+  private buildCar(color: number, variant: number, role: 'car' | 'police' | 'taxi'): void {
+    const body = role === 'police' ? POLICE_WHITE : role === 'taxi' ? 0xffd23f : color;
     const g = this.scene.add.graphics();
     g.lineStyle(4, C.ink, 1);
     // cabin first, so the body overlaps its lower edge
@@ -70,9 +74,22 @@ export class VehicleView extends Phaser.GameObjects.Container {
     g.strokePoints(cabin, true, true);
     g.fillRoundedRect(-75, -42, 150, 34, { tl: 8, tr: 16, bl: 6, br: 8 });
     g.strokeRoundedRect(-75, -42, 150, 34, { tl: 8, tr: 16, bl: 6, br: 8 });
-    if (police) {
+    if (role === 'police') {
       g.fillStyle(POLICE_BLUE, 1);
       g.fillRect(-73, -26, 146, 11);
+    } else if (role === 'taxi') {
+      // checker strip along the door
+      for (let i = 0; i < 8; i++) {
+        g.fillStyle(i % 2 === 0 ? C.ink : C.cream, 1);
+        g.fillRect(-44 + i * 10, -28, 10, 6);
+        g.fillStyle(i % 2 === 1 ? C.ink : C.cream, 1);
+        g.fillRect(-44 + i * 10, -22, 10, 6);
+      }
+      // roof TAXI sign
+      g.fillStyle(0xffb703, 1);
+      g.lineStyle(3, C.ink, 1);
+      g.fillRoundedRect(-14, -77, 28, 9, 3);
+      g.strokeRoundedRect(-14, -77, 28, 9, 3);
     }
     // windows
     g.fillStyle(C.glass, 1);
@@ -95,7 +112,7 @@ export class VehicleView extends Phaser.GameObjects.Container {
     g.fillStyle(0x4a4650, 1);
     g.fillRoundedRect(-79, -16, 10, 8, 3);
     g.fillRoundedRect(68, -16, 10, 8, 3);
-    if (police) {
+    if (role === 'police') {
       drawStar(g, -14, -33, 7, C.yellow, C.ink, 2);
       g.fillStyle(C.ink, 1);
       g.fillRoundedRect(-12, -74, 24, 6, 2);
@@ -176,6 +193,84 @@ export class VehicleView extends Phaser.GameObjects.Container {
     this.addWheel(68, 20);
   }
 
+  /** Box truck: tall cargo box at the back, cab at the front, big wheels. */
+  private buildTruck(color: number): void {
+    const g = this.scene.add.graphics();
+    g.lineStyle(5, C.ink, 1);
+    // cargo box
+    g.fillStyle(color, 1);
+    g.fillRoundedRect(-122, -118, 162, 92, { tl: 10, tr: 10, bl: 4, br: 4 });
+    g.strokeRoundedRect(-122, -118, 162, 92, { tl: 10, tr: 10, bl: 4, br: 4 });
+    g.fillStyle(shade(color, 0.2), 1);
+    g.fillRect(-114, -108, 146, 16);
+    // chassis
+    g.fillStyle(0x4a4650, 1);
+    g.fillRect(-120, -26, 240, 14);
+    g.strokeRect(-120, -26, 240, 14);
+    // cab
+    const cabColor = 0xf1ead8;
+    g.fillStyle(cabColor, 1);
+    g.fillRoundedRect(44, -92, 76, 80, { tl: 8, tr: 20, bl: 4, br: 8 });
+    g.strokeRoundedRect(44, -92, 76, 80, { tl: 8, tr: 20, bl: 4, br: 8 });
+    // cab window
+    g.fillStyle(C.glass, 1);
+    g.lineStyle(3, C.ink, 1);
+    const win = [V(54, -84), V(98, -84), V(112, -56), V(54, -56)];
+    g.fillPoints(win, true);
+    g.strokePoints(win, true, true);
+    // headlight + taillight
+    g.fillStyle(0xfff3b0, 1);
+    g.fillEllipse(116, -34, 8, 12);
+    g.strokeEllipse(116, -34, 8, 12);
+    g.fillStyle(C.red, 1);
+    g.fillRect(-123, -38, 5, 14);
+    this.add(g);
+    this.add(this.archs([-72, 82], 19));
+    this.addWheel(-72, 19);
+    this.addWheel(82, 19);
+  }
+
+  /** White ambulance van with a red stripe, red cross, and flashing roof light bar. */
+  private buildAmbulance(): void {
+    const g = this.scene.add.graphics();
+    g.lineStyle(4, C.ink, 1);
+    g.fillStyle(0xf8f9fa, 1);
+    g.fillRoundedRect(-95, -92, 190, 80, { tl: 12, tr: 26, bl: 6, br: 8 });
+    g.strokeRoundedRect(-95, -92, 190, 80, { tl: 12, tr: 26, bl: 6, br: 8 });
+    // red stripe
+    g.fillStyle(C.red, 1);
+    g.fillRect(-93, -38, 186, 12);
+    // windshield + side cab window
+    g.fillStyle(C.glass, 1);
+    g.lineStyle(3, C.ink, 1);
+    const shield = [V(44, -82), V(74, -82), V(90, -52), V(44, -52)];
+    g.fillPoints(shield, true);
+    g.strokePoints(shield, true, true);
+    // red cross on the side
+    g.fillStyle(C.red, 1);
+    g.fillRect(-38, -76, 12, 30);
+    g.fillRect(-47, -67, 30, 12);
+    // roof light bar
+    g.fillStyle(C.ink, 1);
+    g.fillRoundedRect(-12, -98, 24, 6, 2);
+    this.lamps = this.scene.add.graphics({ x: 0, y: -102 });
+    // lamps and bumpers
+    g.fillStyle(0xfff3b0, 1);
+    g.fillEllipse(91, -30, 8, 12);
+    g.strokeEllipse(91, -30, 8, 12);
+    g.fillStyle(C.red, 1);
+    g.fillRect(-96, -42, 5, 14);
+    g.fillStyle(0x4a4650, 1);
+    g.fillRoundedRect(-99, -16, 10, 8, 3);
+    g.fillRoundedRect(88, -16, 10, 8, 3);
+    this.add(g);
+    this.add(this.archs([-54, 54], 17));
+    this.addWheel(-54, 17);
+    this.addWheel(54, 17);
+    if (this.lamps) this.add(this.lamps);
+    this.siren(0);
+  }
+
   private addHeadlightBeam(x: number, y: number): void {
     const beam = this.scene.add.graphics();
     beam.setBlendMode(Phaser.BlendModes.ADD);
@@ -191,7 +286,8 @@ export class VehicleView extends Phaser.GameObjects.Container {
   /** A red "!" over a driver who follows too close: he may run into us if we stop suddenly. */
   setHasty(on: boolean): void {
     if (on && !this.badge) {
-      const g = this.scene.add.graphics({ x: 0, y: this.kind === 'minibus' ? -118 : -90 });
+      const y = this.kind === 'minibus' || this.kind === 'truck' ? -118 : this.kind === 'ambulance' ? -105 : -90;
+      const g = this.scene.add.graphics({ x: 0, y });
       g.fillStyle(C.red, 1);
       g.lineStyle(4, C.ink, 1);
       g.fillCircle(0, 0, 15);
@@ -217,7 +313,11 @@ export class VehicleView extends Phaser.GameObjects.Container {
     const pts: Array<[number, number]> =
       this.kind === 'minibus'
         ? [[111, -48], [-114, -56]]
-        : [[71, -22], [-74, -22]];
+        : this.kind === 'truck'
+          ? [[116, -48], [-121, -48]]
+          : this.kind === 'ambulance'
+            ? [[91, -44], [-94, -48]]
+            : [[71, -22], [-74, -22]];
     for (const [bx, by] of pts) {
       g.fillStyle(0xffb703, 0.4);
       g.fillCircle(bx, by, 13);

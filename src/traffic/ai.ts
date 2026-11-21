@@ -5,7 +5,7 @@ import type { LightState } from '../core/traffic';
  * They drive in the oncoming lane, i.e. towards decreasing x, and follow the rules:
  * stop for red (and for yellow when they still can), keep a distance to the vehicle ahead.
  */
-export type VehicleKind = 'car' | 'police' | 'minibus';
+export type VehicleKind = 'car' | 'police' | 'taxi' | 'truck' | 'minibus' | 'ambulance';
 
 export interface VehicleSpec {
   /** Body length in local (unscaled) px. */
@@ -17,7 +17,10 @@ export interface VehicleSpec {
 export const SPECS: Record<VehicleKind, VehicleSpec> = {
   car: { length: 150, cruise: [150, 215] },
   police: { length: 160, cruise: [170, 215] },
+  taxi: { length: 150, cruise: [165, 225] },
+  truck: { length: 245, cruise: [105, 145] },
   minibus: { length: 230, cruise: [120, 170] },
+  ambulance: { length: 190, cruise: [215, 260] },
 };
 
 export const AI = {
@@ -122,10 +125,14 @@ export function nextSpeed(v: number, target: number, dt: number, brake: number =
   return v < target ? Math.min(target, v + AI.accel * dt) : Math.max(target, v - brake * dt);
 }
 
-/** Types and how often they appear. A single police car at most, and rarely. */
-export function pickKind(rng: () => number, policeOnRoad: boolean): VehicleKind {
-  if (!policeOnRoad && rng() < 0.12) return 'police';
-  return rng() < 0.72 ? 'car' : 'minibus';
+/** Types and how often they appear. At most one emergency vehicle at a time, and rarely. */
+export function pickKind(rng: () => number, emergencyOnRoad: boolean): VehicleKind {
+  if (!emergencyOnRoad && rng() < 0.14) return rng() < 0.55 ? 'police' : 'ambulance';
+  const r = rng();
+  if (r < 0.46) return 'car';
+  if (r < 0.68) return 'taxi';
+  if (r < 0.86) return 'minibus';
+  return 'truck';
 }
 
 /** Seconds until the next vehicle appears: busier roads on later levels. */

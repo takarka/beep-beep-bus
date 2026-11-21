@@ -11,12 +11,15 @@ import { resolveLane, type Body } from './collision';
 import { depthForY } from './Crossing';
 import { CAR_COLORS, MINIBUS_COLORS, VehicleView } from './VehicleView';
 
-type LaneKind = 'car' | 'minibus' | 'bus';
+type LaneKind = 'car' | 'taxi' | 'truck' | 'minibus' | 'bus' | 'ambulance';
 
 /** Drawing scale per kind (a car is about half as long as our bus) and the speeds drivers like. */
 const KIND = {
   car: { length: 150, scale: 1.2, cruise: [185, 255] },
+  taxi: { length: 150, scale: 1.2, cruise: [195, 265] },
+  truck: { length: 245, scale: 1.0, cruise: [120, 160] },
   minibus: { length: 230, scale: 1.02, cruise: [150, 200] },
+  ambulance: { length: 190, scale: 1.12, cruise: [285, 330] },
 } as const;
 const BUS_CRUISE: readonly [number, number] = [140, 190];
 const SIGNALS_STOP_FROM = 0; // vehicles stop right at the line, like our bus should
@@ -51,6 +54,8 @@ interface LaneVehicle {
   life: number;
   leaving: boolean;
   parked?: boolean;
+  ambState?: 'approaching' | 'passed' | 'blocked';
+  ambBlockedTime?: number;
 }
 
 export interface SignalState {
@@ -81,6 +86,8 @@ export interface LaneResult {
   /** Our bus after the collisions (position pushed back / speed shared), or null if it was not part of the lane. */
   player: PlayerBody | null;
   crashes: LaneCrash[];
+  ambulanceEvent?: 'approaching' | 'yielded' | 'blocked';
+  ambulanceLane?: LaneIndex;
 }
 
 /**
@@ -93,6 +100,7 @@ export class LaneTraffic {
   private rng: Rng = mulberry32(Math.floor(Math.random() * 1e9));
   private aheadTimer: number;
   private behindTimer: number;
+  private ambulanceTimer: number;
   private readonly plan: ReturnType<typeof lanePlan>;
   private readonly zones;
 
@@ -104,6 +112,7 @@ export class LaneTraffic {
     this.zones = bumpZones(opts.bumps, true);
     this.aheadTimer = randRange(this.rng, 4, 8);
     this.behindTimer = randRange(this.rng, 7, 12);
+    this.ambulanceTimer = randRange(this.rng, 14, 22);
   }
 
   get enabled(): boolean {
@@ -142,8 +151,8 @@ export class LaneTraffic {
   private spawn(x: number, lane: 0 | 1 = 0, forceKind?: LaneKind): LaneVehicle {
     const y = lane === 0 ? LANE_Y.main : LANE_Y.passing;
     const roll = this.rng();
-    const kind: LaneKind = forceKind ?? (roll < 0.6 ? 'car' : roll < 0.8 ? 'minibus' : 'bus');
-    const hasty: Driver = kind !== 'bus' && this.rng() < this.plan.hastyChance ? 'hasty' : 'careful';
+    const kind: LaneKind = forceKind ?? (roll < 0.42 ? 'car' : roll < 0.62 ? 'taxi' : roll < 0.76 ? 'minibus' : roll < 0.88 ? 'truck' : 'bus');
+    const hasty: Driver = kind !== 'bus' && kind !== 'ambulance' && this.rng() < this.plan.hastyChance ? 'hasty' : 'careful';
     let view: VehicleView | BusView;
     let len: number;
     let scale: number;
@@ -280,6 +289,7 @@ export class LaneTraffic {
         v.view.setAngle(Phaser.Math.Clamp((targetY - v.y) / 32, -1, 1) * 3); // the nose points where it is going
       }
       v.view.setBlinker(v.changeT > 0 || v.leaving, this.scene.time.now);
+      if (v.kind === 'ambulance' && v.view instanceof VehicleView) v.view.siren(this.scene.time.now);
       if (v.view instanceof BusView) v.view.roll(dx, dt, Math.min(1, v.v / 260));
       else v.view.roll(dx, v.scale);
     }
@@ -314,10 +324,36 @@ export class LaneTraffic {
       v.view.setX(v.x);
     }
 
+    let ambulanceEvent: LaneResult['ambulanceEvent'];
+    let ambulanceLane: LaneIndex | undefined;
+    if (player) {
+      for (const v of solid) {
+        if (v.kind !== 'ambulance') continue;
+        if (!v.ambState && v.x < player.x && player.x - v.x < 950) {
+          v.ambState = 'approaching';
+          v.ambBlockedTime = 0;
+          ambulanceEvent = 'approaching';
+          ambulanceLane = v.lane;
+        } else if (v.ambState === 'approaching') {
+          ambulanceLane = v.lane;
+          if (v.x > player.x + player.len / 2 && !occupiesPlayer(player, v.lane)) {
+            v.ambState = 'passed';
+            ambulanceEvent = 'yielded';
+          } else if (occupiesPlayer(player, v.lane) && v.x < player.x && player.x - player.len / 2 - (v.x + v.len / 2) < 170) {
+            v.ambBlockedTime = (v.ambBlockedTime ?? 0) + dt;
+            if (v.ambBlockedTime > 2.8) {
+              v.ambState = 'blocked';
+              ambulanceEvent = 'blocked';
+            }
+          }
+        }
+      }
+    }
+
     this.warnHasty(player);
     this.leaveAndSpawn(dt, scrollX, player);
     const pb = bodyOf.get(null);
-    return { player: player && pb ? { x: pb.x, len: player.len, v: pb.v } : null, crashes };
+    return { player: player && pb ? { x: pb.x, len: player.len, v: pb.v } : null, crashes, ambulanceEvent, ambulanceLane };
   }
 
   /**
@@ -345,6 +381,7 @@ export class LaneTraffic {
       veh.passTimer = 1.6;
       veh.cool = LANE_CHANGE_TIME + 0.8;
     };
+    if (veh.kind === 'ambulance' && veh.ambState === 'approaching') return;
     if (veh.lane === 0) {
       const gap = leader ? leader.x - leader.len / 2 - front : Infinity;
       if (leader && wantsToOvertake(veh.cruise, veh.v, { gap, v: leader.v }) && laneClear(me, lists[1].filter((o) => o !== e))) start(1);
@@ -390,10 +427,20 @@ export class LaneTraffic {
     if (!this.plan.enabled || this.vehicles.length >= MAX_VEHICLES) return;
     this.aheadTimer -= dt;
     this.behindTimer -= dt;
+    this.ambulanceTimer -= dt;
     // Some drivers start in the passing lane (they are the ones that come by quickly).
     const pickLane = (): 0 | 1 => (this.rng() < 0.22 ? 1 : 0);
     const free = (x: number, lane: 0 | 1, room: number): boolean =>
       !this.vehicles.some((v) => (v.lane === lane || (v.changeT > 0 && v.fromLane === lane)) && Math.abs(v.x - x) < v.len / 2 + room);
+    if (this.opts.level >= 3 && this.ambulanceTimer <= 0 && player && !this.vehicles.some((v) => v.kind === 'ambulance')) {
+      const x = scrollX - 350;
+      const lane: 0 | 1 = player.lane ?? 0;
+      if (free(x, lane, 420) && Math.abs(player.x - x) > 450) {
+        const amb = this.spawn(x, lane, 'ambulance');
+        amb.life = 5500;
+        this.ambulanceTimer = randRange(this.rng, 22, 34);
+      } else this.ambulanceTimer = 1.5;
+    }
     if (this.aheadTimer <= 0) {
       const x = scrollX + GAME_W + 280;
       const lane = pickLane();

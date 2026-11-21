@@ -28,6 +28,10 @@ export const POINTS = {
   carefulChildren: 3,
   /** Drove too fast past a "Children" sign. */
   fastChildren: -5,
+  /** Moved out of the way to let an ambulance pass. */
+  yieldAmbulance: 5,
+  /** Blocked an ambulance with its siren on. */
+  blockAmbulance: -5,
 } as const;
 
 /** This many mistakes in a row (with nothing good in between) bring the police siren. */

@@ -69,7 +69,7 @@
 - [x] **STOP sign**, "children" sign, speed bumps
 - [x] Parked cars (remaining: a bot bus that stops at the bus stops too)
 - [ ] Oncoming drivers overtaking each other
-- [ ] More vehicle types (taxi, truck, ambulance that you must let pass)
+- [x] More vehicle types (taxi, truck, ambulance that you must let pass)
 - [ ] Evening / sunrise, fog, wipers
 - [ ] More routes / cities after Astana (Almaty, Shymkent, the seaside, mountains)
 - [ ] Landmark story on each level: a short postcard or fact when it is completed

@@ -13,7 +13,7 @@ const ONCOMING_Y = [LANE_Y.oncomingNear, LANE_Y.oncomingFar] as const;
  * Drawing scale per kind, chosen so the proportions to our bus (about 380 px long, 150 px tall) look real:
  * a car is roughly 45% of its length, a small bus about 60%. A bit smaller than the near lane: perspective.
  */
-const SCALES: Record<VehicleKind, number> = { car: 1.12, police: 1.12, minibus: 0.92 };
+const SCALES: Record<VehicleKind, number> = { car: 1.12, police: 1.12, taxi: 1.12, truck: 0.96, minibus: 0.92, ambulance: 1.05 };
 const MAX_VEHICLES = 9;
 const SPAWN_AHEAD = 320;
 const SPAWN_GAP = 250;
@@ -64,7 +64,7 @@ export class TrafficManager {
   }
 
   private spawn(x: number, lane: 0 | 1 = this.rng() < 0.6 ? 0 : 1): Vehicle {
-    const kind = pickKind(this.rng, this.vehicles.some((v) => v.kind === 'police'));
+    const kind = pickKind(this.rng, this.vehicles.some((v) => v.kind === 'police' || v.kind === 'ambulance'));
     const spec = SPECS[kind];
     const color = kind === 'minibus' ? pick(this.rng, MINIBUS_COLORS) : pick(this.rng, CAR_COLORS);
     const view = new VehicleView(this.scene, kind, color, this.rng() < 0.5 ? 0 : 1, this.opts.night);
@@ -100,7 +100,7 @@ export class TrafficManager {
       for (const bx of this.opts.bumps) if (before > bx && veh.x <= bx) this.hop(veh);
       veh.view.setX(veh.x);
       veh.view.roll(dx, veh.scale);
-      if (veh.kind === 'police') veh.view.siren(this.scene.time.now);
+      if (veh.kind === 'police' || veh.kind === 'ambulance') veh.view.siren(this.scene.time.now);
     });
 
     // Leave the stage behind the camera.

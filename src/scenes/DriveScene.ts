@@ -1553,6 +1553,25 @@ export class DriveScene extends Phaser.Scene {
         this.v = Phaser.Math.Clamp(res.player.v, 0, maxNormal * NITRO.speedFactor + 150);
       }
       res.crashes.forEach((c) => this.onCrash(c));
+      if (res.ambulanceEvent === 'approaching') {
+        audio.siren(1.5);
+        this.showBanner(t('yieldAmbulance'), C.red, 2000, (g) => {
+          g.fillStyle(C.cream, 1);
+          g.fillCircle(0, 0, 22);
+          g.fillStyle(C.red, 1);
+          g.fillRect(-5, -14, 10, 28);
+          g.fillRect(-14, -5, 28, 10);
+        });
+      } else if (res.ambulanceEvent === 'yielded') {
+        this.award(POINTS.yieldAmbulance, this.bus.x);
+        audio.reward();
+        this.showBanner(t('wellDone'), C.green, 1300, (g) => drawStar(g, 0, 0, 26, C.yellow, C.ink, 3));
+      } else if (res.ambulanceEvent === 'blocked') {
+        this.mistake(t('blockAmbulance'), POINTS.blockAmbulance, this.bus.x);
+      }
+      if (this.assist && res.ambulanceLane !== undefined && res.ambulanceLane === this.busLane.lane && this.busLane.changeT <= 0) {
+        this.requestLane(res.ambulanceLane === 0 ? 1 : 0);
+      }
     }
     const front = this.bus.frontWorldX();
     this.bus.roll(dx, dt, Math.min(1.4, this.v / maxNormal));
