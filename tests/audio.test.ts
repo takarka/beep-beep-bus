@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MUSIC_THEMES, midiToHz, stepBass, stepChord, stepNote, themeForCity, type MusicThemeId } from '../src/audio/musicThemes';
-import { VOICE_CUES, VOICE_PHRASES, pickVoice } from '../src/audio/voice';
+import { VOICE_CUES, VOICE_PHRASES, pickVoice, voiceUrl } from '../src/audio/voice';
 import { CITIES } from '../src/core/campaign';
 import { LANGS } from '../src/i18n';
 
@@ -77,5 +77,11 @@ describe('voice prompts', () => {
     expect(pickVoice(voices, 'kk')?.name).toBe('RU');
     expect(pickVoice([...voices, { lang: 'kk-KZ', name: 'KK' }], 'kk')?.name).toBe('KK');
     expect(pickVoice([], 'ru')).toBeNull();
+  });
+
+  it('builds consistent relative MP3 URLs for every voice clip', () => {
+    expect(voiceUrl('kk', 'stop')).toBe('./audio/voice/kk/stop.mp3');
+    expect(voiceUrl('ru', 'finish')).toBe('./audio/voice/ru/finish.mp3');
+    expect(voiceUrl('en', 'redLight')).toBe('./audio/voice/en/redLight.mp3');
   });
 });

@@ -21,7 +21,7 @@ interface Walker {
  */
 export class Crossing {
   private walkers: Walker[] = [];
-  private pending = 0;
+  private pendingDelays: number[] = [];
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -32,18 +32,14 @@ export class Crossing {
 
   /** Somebody is crossing (or about to start): vehicles must wait. */
   get busy(): boolean {
-    return this.pending > 0 || this.walkers.length > 0;
+    return this.pendingDelays.length > 0 || this.walkers.length > 0;
   }
 
   /** 1–3 people, one after another. */
   spawnGroup(): void {
     const n = 1 + Math.floor(Math.random() * 3);
-    this.pending += n;
     for (let i = 0; i < n; i++) {
-      this.scene.time.delayedCall(150 + i * 380, () => {
-        this.pending--;
-        this.spawnOne();
-      });
+      this.pendingDelays.push(0.15 + i * 0.38);
     }
   }
 
@@ -64,6 +60,15 @@ export class Crossing {
   }
 
   update(dt: number): void {
+    if (this.pendingDelays.length > 0) {
+      const remaining: number[] = [];
+      for (const delay of this.pendingDelays) {
+        const next = delay - dt;
+        if (next <= 0) this.spawnOne();
+        else remaining.push(next);
+      }
+      this.pendingDelays = remaining;
+    }
     for (const w of this.walkers.slice()) {
       const y = w.img.y + w.dir * w.speed * dt;
       this.place(w, y);

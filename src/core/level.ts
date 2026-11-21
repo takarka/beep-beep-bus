@@ -1,5 +1,8 @@
+import { BRIDGE_ARCH, BRIDGE_MAX_LEN, BRIDGE_MIN_LEN, hasBridgeFor, type BridgeData } from './bridge';
 import { mulberry32, pick, randInt } from './rng';
 import type { LightState } from './traffic';
+
+export { hasBridgeFor, type BridgeData } from './bridge';
 
 export const STOP_PLACES = ['park', 'school', 'shop', 'circus'] as const;
 export type StopPlace = (typeof STOP_PLACES)[number];
@@ -44,6 +47,8 @@ export interface LevelData {
   parked: number[];
   /** World x of "Children" warning zones (from level 4). */
   children: number[];
+  /** Long gently-arched bridges over a lake (on some levels). */
+  bridges: BridgeData[];
   finishX: number;
   length: number;
   maxSpeed: number;
@@ -109,7 +114,21 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
   const dropOnlyIdx = level >= 2 && stops >= 4 ? randInt(rng, 1, stops - 2) : -1;
   let stopSeq = 0;
 
-  for (const kind of kinds) {
+  const wantBridge = hasBridgeFor(level);
+  const neededGaps =
+    stationCountFor(level) +
+    bumpCountFor(level) +
+    crosswalkCountFor(level) +
+    stopSignCountFor(level) +
+    parkedCountFor(level) +
+    childrenCountFor(level);
+  // Reserve a dedicated inter-item gap when one is free; otherwise place the bridge on the final approach.
+  const bridgeGapIdx = wantBridge && kinds.length - 1 > neededGaps ? Math.floor((kinds.length - 1) / 2) : -1;
+  const bridgeLen = wantBridge ? randInt(rng, BRIDGE_MIN_LEN, BRIDGE_MAX_LEN) : 0;
+  const bridges: BridgeData[] = [];
+
+  for (let idxItem = 0; idxItem < kinds.length; idxItem++) {
+    const kind = kinds[idxItem]!;
     if (kind === 'light') {
       items.push({
         kind,
@@ -130,11 +149,17 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
       );
       items.push({ kind, zoneEnd: x, waiting, exiting: randInt(rng, 0, 3), place, destinations });
     }
-    x += randInt(rng, MIN_GAP, MAX_GAP);
+    if (idxItem === bridgeGapIdx) {
+      const margin = 850;
+      bridges.push({ x0: x + margin, x1: x + margin + bridgeLen, arch: BRIDGE_ARCH });
+      x += bridgeLen + margin * 2;
+    } else {
+      x += randInt(rng, MIN_GAP, MAX_GAP);
+    }
   }
 
   const spots = items.map((i) => (i.kind === 'stop' ? i.zoneEnd : i.lineX));
-  const gaps = spots.slice(1).map((_, i) => i);
+  const gaps = spots.slice(1).map((_, i) => i).filter((g) => g !== bridgeGapIdx);
 
   // Gas stations go into gaps spread evenly along the route, in the middle of the gap.
   const stations: number[] = [];
@@ -188,7 +213,14 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
   }
   children.sort((a, b) => a - b);
 
-  const finishX = x;
+  let finishX = x;
+  if (wantBridge && bridges.length === 0) {
+    const lastSpot = spots[spots.length - 1] ?? FIRST_ITEM_X;
+    const x0 = lastSpot + 850;
+    const x1 = x0 + bridgeLen;
+    bridges.push({ x0, x1, arch: BRIDGE_ARCH });
+    finishX = Math.max(finishX, x1 + 1100);
+  }
   return {
     level,
     items,
@@ -198,6 +230,7 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
     stopSigns,
     parked,
     children,
+    bridges,
     finishX,
     length: finishX + 1400,
     maxSpeed: maxSpeedFor(level),

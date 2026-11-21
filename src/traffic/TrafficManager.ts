@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { GAME_W } from '../config';
+import { bridgeLiftAt, bridgeSlopeDegAt, type BridgeData } from '../core/bridge';
 import type { LightState } from '../core/traffic';
 import { mulberry32, pick, randRange, type Rng } from '../core/rng';
 import { AI, ONCOMING_STOP_OFFSET, SPECS, bumpZones, nextSpeed, pickKind, spawnDelay, targetSpeed, wantsToOvertake, type VehicleKind } from './ai';
@@ -51,12 +52,14 @@ export class TrafficManager {
   private rng: Rng = mulberry32(Math.floor(Math.random() * 1e9));
   private timer = 1.5;
   private readonly zones;
+  private readonly bridges: readonly BridgeData[];
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly opts: { night: boolean; level: number; bumps: readonly number[] },
+    private readonly opts: { night: boolean; level: number; bumps: readonly number[]; bridges?: readonly BridgeData[] },
   ) {
     this.zones = bumpZones(opts.bumps, false);
+    this.bridges = opts.bridges ?? [];
   }
 
   /** Puts a few vehicles on the road so it isn't empty at the start. */
@@ -75,7 +78,8 @@ export class TrafficManager {
     const view = new VehicleView(this.scene, kind, color, this.rng() < 0.5 ? 0 : 1, this.opts.night);
     const scale = SCALES[kind] * (lane === 1 ? 0.93 : 1); // the far lane is a bit smaller: perspective
     view.setScale(-scale, scale); // mirrored: drives left
-    view.setPosition(x, ONCOMING_Y[lane]);
+    view.setPosition(x, ONCOMING_Y[lane] - bridgeLiftAt(this.bridges, x));
+    view.setAngle(bridgeSlopeDegAt(this.bridges, x));
     view.setDepth(depthForY(ONCOMING_Y[lane]));
     const cruise = randRange(this.rng, spec.cruise[0], spec.cruise[1]);
     const vehicle: Vehicle = {
@@ -125,7 +129,9 @@ export class TrafficManager {
       const before = veh.x;
       veh.x -= dx;
       for (const bx of this.opts.bumps) if (before > bx && veh.x <= bx) this.hop(veh);
-      veh.view.setPosition(veh.x, veh.y);
+      const lift = bridgeLiftAt(this.bridges, veh.x);
+      veh.view.setPosition(veh.x, veh.y - lift);
+      veh.view.setAngle(bridgeSlopeDegAt(this.bridges, veh.x));
       veh.view.setDepth(depthForY(veh.y));
       veh.view.setBlinker(veh.changeT > 0, this.scene.time.now);
       veh.view.roll(dx, veh.scale);

@@ -3,10 +3,11 @@ import { BusView } from '../bus/BusView';
 import { BUS_COLORS, type BusDesign } from '../bus/design';
 import { BODY_SIZE, DRIVE_SCALE } from '../bus/geometry';
 import { GAME_W } from '../config';
+import { bridgeLiftAt, bridgeSlopeDegAt, type BridgeData } from '../core/bridge';
 import { mulberry32, pick, randInt, randRange, type Rng } from '../core/rng';
 import type { LightState } from '../core/traffic';
 import { DRIVERS, bumpZones, laneClear, lanePlan, nextSpeed, targetSpeed, wantsToOvertake, type Driver } from './ai';
-import { LANE_CHANGE_TIME, LANE_Y, laneY, occupiesLane, type LaneIndex } from './lanes';
+import { LANE_CHANGE_TIME, LANE_Y, collidesInLane, laneY, occupiesLane, type LaneIndex } from './lanes';
 import { resolveLane, type Body } from './collision';
 import { depthForY } from './Crossing';
 import { CAR_COLORS, MINIBUS_COLORS, VehicleView } from './VehicleView';
@@ -72,6 +73,7 @@ export interface PlayerBody {
   lane?: LaneIndex;
   fromLane?: LaneIndex;
   changeT?: number;
+  y?: number;
 }
 
 export interface LaneCrash {
@@ -105,13 +107,22 @@ export class LaneTraffic {
   private ambulanceTimer: number;
   private readonly plan: ReturnType<typeof lanePlan>;
   private readonly zones;
+  private readonly bridges: readonly BridgeData[];
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly opts: { night: boolean; level: number; bumps: readonly number[]; parked?: readonly number[]; stops?: readonly number[] },
+    private readonly opts: {
+      night: boolean;
+      level: number;
+      bumps: readonly number[];
+      parked?: readonly number[];
+      stops?: readonly number[];
+      bridges?: readonly BridgeData[];
+    },
   ) {
     this.plan = lanePlan(opts.level);
     this.zones = bumpZones(opts.bumps, true);
+    this.bridges = opts.bridges ?? [];
     this.aheadTimer = randRange(this.rng, 4, 8);
     this.behindTimer = randRange(this.rng, 7, 12);
     this.ambulanceTimer = randRange(this.rng, 14, 22);
@@ -187,6 +198,9 @@ export class LaneTraffic {
       len = k.length * k.scale;
       cruise = randRange(this.rng, k.cruise[0], k.cruise[1]);
     }
+    const lift0 = bridgeLiftAt(this.bridges, x);
+    view.setY(y - lift0);
+    view.setAngle(bridgeSlopeDegAt(this.bridges, x));
     view.setDepth(depthForY(y));
     const vehicle: LaneVehicle = {
       kind,
@@ -261,6 +275,7 @@ export class LaneTraffic {
         headway: d.headway,
         minGap: d.minGap,
         brake: d.planBrake,
+        lightBrake: d.brake,
       });
       if (veh.kind === 'bus' && veh.lane === 0) {
         if ((veh.stopWait ?? 0) > 0) {
@@ -310,9 +325,11 @@ export class LaneTraffic {
       v.view.setX(v.x);
       if (!v.leaving) {
         const targetY = laneY(v.lane);
-        v.view.setY(v.y - v.hop);
+        const lift = bridgeLiftAt(this.bridges, v.x);
+        const pitch = bridgeSlopeDegAt(this.bridges, v.x);
+        v.view.setY(v.y - lift - v.hop);
         v.view.setDepth(depthForY(v.y));
-        v.view.setAngle(Phaser.Math.Clamp((targetY - v.y) / 32, -1, 1) * 3); // the nose points where it is going
+        v.view.setAngle(Phaser.Math.Clamp((targetY - v.y) / 32, -1, 1) * 3 + pitch); // the nose points where it is going
       }
       v.view.setBlinker(v.changeT > 0 || v.leaving, this.scene.time.now);
       if (v.kind === 'ambulance' && v.view instanceof VehicleView) v.view.siren(this.scene.time.now);
@@ -320,15 +337,16 @@ export class LaneTraffic {
       else v.view.roll(dx, v.scale);
     }
 
-    // Solid bodies: nobody drives through anybody, in each lane. (A vehicle between two lanes is in both.)
+    // Solid bodies: nobody drives through anybody, in each lane, based on actual lateral wheel height.
     const bodyOf = new Map<LaneVehicle | null, Body>();
     for (const v of solid) bodyOf.set(v, { x: v.x, len: v.len, v: v.v });
     if (player) bodyOf.set(null, { x: player.x, len: player.len, v: player.v });
+    const playerY = player ? (player.y ?? laneY(player.lane ?? 0)) : 0;
     const crashes: LaneCrash[] = [];
     for (const lane of [0, 1] as const) {
       const members: Array<LaneVehicle | null> = [
-        ...solid.filter((v) => occupiesLane(v, lane)),
-        ...(player && occupiesPlayer(player, lane) ? [null] : []),
+        ...solid.filter((v) => collidesInLane(v.y, lane)),
+        ...(player && collidesInLane(playerY, lane) ? [null] : []),
       ];
       const hits = resolveLane(members.map((m) => bodyOf.get(m)!));
       for (const h of hits) {
@@ -434,15 +452,12 @@ export class LaneTraffic {
   }
 
   private leaveAndSpawn(dt: number, scrollX: number, player: PlayerBody | null): void {
-    for (const v of this.vehicles) {
-      // Turn into a side street (only when it is not hemmed in right behind us).
-      if (!v.parked && !v.leaving && v.life <= 0 && v.stall <= 0) {
-        v.leaving = true;
-        this.scene.tweens.add({ targets: v.view, y: v.y + 80, alpha: 0, angle: 0, duration: 900, ease: 'Sine.easeIn' });
-      }
-    }
     this.vehicles = this.vehicles.filter((v) => {
-      const gone = v.x < scrollX - 1500 || (!v.parked && v.x > scrollX + GAME_W + 2600) || (v.leaving && v.view.alpha <= 0.02);
+      const offScreen = v.x + v.len / 2 < scrollX - 200 || v.x - v.len / 2 > scrollX + GAME_W + 200;
+      const gone =
+        v.x + v.len / 2 < scrollX - 1500 ||
+        (!v.parked && v.x - v.len / 2 > scrollX + GAME_W + 2600) ||
+        (!v.parked && v.life <= 0 && offScreen);
       if (gone) {
         this.scene.tweens.killTweensOf(v.view);
         v.view.destroy();

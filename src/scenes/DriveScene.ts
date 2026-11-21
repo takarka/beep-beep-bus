@@ -8,6 +8,7 @@ import { loadBusStatus, loadDesign, saveBusStatus } from '../bus/garage';
 import { DRIVE_SCALE } from '../bus/geometry';
 import { getSettings, updateSettings } from '../core/settings';
 import { C, GAME_H, GAME_W } from '../config';
+import { bridgeLiftAt, bridgeSlopeDegAt } from '../core/bridge';
 import { START_X, generateLevel, type LevelData, type LightData, type StopData, type StopPlace } from '../core/level';
 import { mulberry32 } from '../core/rng';
 import {
@@ -26,6 +27,7 @@ import { TrafficLightModel, type LightState } from '../core/traffic';
 import { t, type TextKey } from '../i18n';
 import { Icons, drawChildrenSign, drawCrosswalkSign, drawMiniLight, drawPlaceIcon, drawRoadStopSign, drawStar, drawStopSign } from '../ui/draw';
 import { GROUND_Y, PASSENGER_VARIANTS, SIDEWALK_FEET_Y, STREET_Y } from '../ui/textures';
+import { BridgeView } from '../ui/bridge';
 import { createScenery } from '../ui/scenery';
 import { cityForLevel, landmarkForLevel } from '../core/campaign';
 import { drawLandmark } from '../ui/landmarks';
@@ -125,6 +127,7 @@ export class DriveScene extends Phaser.Scene {
   private signals: LightRt[] = [];
   private crosswalks: CrosswalkRt[] = [];
   private stopSigns: StopSignRt[] = [];
+  private bridgeViews: BridgeView[] = [];
   private phase: Phase = 'driving';
   private v = 0;
   private stillTime = 0;
@@ -206,6 +209,7 @@ export class DriveScene extends Phaser.Scene {
     this.signals = [];
     this.crosswalks = [];
     this.stopSigns = [];
+    this.bridgeViews = [];
     this.phase = 'driving';
     this.v = 0;
     this.stillTime = 0;
@@ -245,6 +249,8 @@ export class DriveScene extends Phaser.Scene {
   }
 
   create(): void {
+    this.time.paused = false;
+    this.tweens.resumeAll();
     this.cameras.main.fadeIn(300, 45, 42, 50);
     this.cameras.main.setBounds(0, 0, this.level.length, GAME_H);
     const env = { ...resolveEnv(this.level.level, getSettings().world), city: cityForLevel(this.level.level) };
@@ -259,7 +265,12 @@ export class DriveScene extends Phaser.Scene {
     this.bus.setWipers(env.precip);
     this.bus.setDamage(1 - this.health / MAX_HEALTH);
     this.updateSmoke();
-    this.traffic = new TrafficManager(this, { night: env.time === 'night', level: this.level.level, bumps: this.level.bumps });
+    this.traffic = new TrafficManager(this, {
+      night: env.time === 'night',
+      level: this.level.level,
+      bumps: this.level.bumps,
+      bridges: this.level.bridges,
+    });
     this.traffic.prewarm(Phaser.Math.Clamp(START_X - this.camLead, 0, this.level.length - GAME_W));
     this.lane = new LaneTraffic(this, {
       night: env.time === 'night',
@@ -267,9 +278,11 @@ export class DriveScene extends Phaser.Scene {
       bumps: this.level.bumps,
       parked: this.level.parked,
       stops: this.level.items.filter((i) => i.kind === 'stop').map((i) => i.zoneEnd),
+      bridges: this.level.bridges,
     });
     this.lane.prewarm(START_X);
     this.bus.setPassengers(0);
+    this.bridgeViews = this.level.bridges.map((b) => new BridgeView(this, b, env));
 
     const stopsTotal = this.level.items.filter((i) => i.kind === 'stop').length;
     let stopIdx = 0;
@@ -301,6 +314,8 @@ export class DriveScene extends Phaser.Scene {
     else if (precip === 'snow') audio.startAmbience('snow');
     else if (env.time === 'night') audio.startAmbience('night');
     this.events.once('shutdown', () => {
+      this.time.paused = false;
+      this.tweens.resumeAll();
       audio.stopEngine();
       audio.stopAmbience();
       audio.stopSiren();
@@ -648,6 +663,20 @@ export class DriveScene extends Phaser.Scene {
     bar.lineBetween(bx0, 53, bx1, 53);
     const toBar = (wx: number) => bx0 + ((wx - START_X) / (this.level.finishX - START_X)) * (bx1 - bx0);
     this.toBar = toBar;
+    for (const b of this.level.bridges) {
+      const mx0 = toBar(b.x0);
+      const mx1 = toBar(b.x1);
+      // Blue water band + subtle arch mark on the progress bar
+      bar.fillStyle(0x4eaee0, 0.9);
+      bar.fillRoundedRect(mx0, 53, Math.max(10, mx1 - mx0), 8, 3);
+      bar.lineStyle(4, C.ink, 0.85);
+      bar.beginPath();
+      const mid = (mx0 + mx1) / 2;
+      bar.moveTo(mx0, 53);
+      bar.lineTo(mid, 47);
+      bar.lineTo(mx1, 53);
+      bar.strokePath();
+    }
     for (const item of this.level.items) {
       if (item.kind === 'light') {
         const mg = this.add.graphics({ x: toBar(item.lineX), y: 53 }).setScrollFactor(0).setDepth(91);
@@ -784,7 +813,8 @@ export class DriveScene extends Phaser.Scene {
     if (now - this.lastHorn < 350) return;
     this.lastHorn = now;
     audio.horn(this.busBody);
-    floatText(this, this.bus.frontWorldX() - 40, 400, t('beep'), C.yellow, 44);
+    const lift = bridgeLiftAt(this.level.bridges, this.bus.x);
+    floatText(this, this.bus.frontWorldX() - 40, 400 - lift, t('beep'), C.yellow, 44);
     const s = this.bus.scaleX;
     this.tweens.add({ targets: this.bus, scaleY: s * 0.93, yoyo: true, duration: 90, onComplete: () => this.bus.setScale(s) });
   }
@@ -1044,8 +1074,9 @@ export class DriveScene extends Phaser.Scene {
   private nitroEffects(): void {
     if (this.boosting && this.flame) {
       const L = this.bus.layout;
+      const lift = bridgeLiftAt(this.level.bridges, this.bus.x);
       // at the height of the rear window: lower down it would hide behind the brake pedal on a touch screen
-      this.flame.setPosition(this.bus.x + L.backX * this.bus.scaleX - 6, this.busLane.y - 95);
+      this.flame.setPosition(this.bus.x + L.backX * this.bus.scaleX - 6, this.busLane.y - lift - 95);
     }
   }
 
@@ -1399,7 +1430,8 @@ export class DriveScene extends Phaser.Scene {
   private wearEffects(dt: number): void {
     if (this.smoke) {
       const L = this.bus.layout;
-      this.smoke.setPosition(this.bus.x + (L.boxFrontX - 70) * this.bus.scaleX, this.busLane.y + (L.top + 18) * this.bus.scaleX);
+      const lift = bridgeLiftAt(this.level.bridges, this.bus.x);
+      this.smoke.setPosition(this.bus.x + (L.boxFrontX - 70) * this.bus.scaleX, this.busLane.y - lift + (L.top + 18) * this.bus.scaleX);
     }
     if (this.health < 40 && this.v > 30) {
       this.coughTimer -= dt;
@@ -1439,7 +1471,8 @@ export class DriveScene extends Phaser.Scene {
   }
 
   private sparks(worldX: number, roadY = this.busLane.y): void {
-    const em = this.add.particles(worldX, roadY - 70, 'dot', {
+    const lift = bridgeLiftAt(this.level.bridges, worldX);
+    const em = this.add.particles(worldX, roadY - lift - 70, 'dot', {
       speed: { min: 90, max: 340 },
       lifespan: 520,
       scale: { start: 0.8, end: 0 },
@@ -1621,7 +1654,9 @@ export class DriveScene extends Phaser.Scene {
     const dx = this.v * dt;
     this.bus.x += dx;
     const steerAngle = stepLaneChange(this.busLane, dt);
-    this.bus.setRoadPose(this.busLane.y, steerAngle);
+    const busLift = bridgeLiftAt(this.level.bridges, this.bus.x);
+    const busPitch = bridgeSlopeDegAt(this.level.bridges, this.bus.x);
+    this.bus.setRoadPose(this.busLane.y - busLift, steerAngle + busPitch);
     this.bus.setDepth(depthForY(this.busLane.y));
     const blinking = this.busLane.changeT > 0;
     this.bus.setBlinker(blinking, this.time.now);
@@ -1657,6 +1692,7 @@ export class DriveScene extends Phaser.Scene {
         lane: this.busLane.lane,
         fromLane: this.busLane.fromLane,
         changeT: this.busLane.changeT,
+        y: this.busLane.y,
       });
       if (res.player) {
         this.bus.x = res.player.x;
@@ -1683,6 +1719,8 @@ export class DriveScene extends Phaser.Scene {
       if (this.assist && res.ambulanceLane !== undefined && res.ambulanceLane === this.busLane.lane && this.busLane.changeT <= 0) {
         this.requestLane(res.ambulanceLane === 0 ? 1 : 0);
       }
+    } else {
+      this.lane.update(dt, cam.scrollX, states, null);
     }
     const front = this.bus.frontWorldX();
     const speedRatio = Math.min(1.3, this.v / maxNormal);
@@ -1709,6 +1747,7 @@ export class DriveScene extends Phaser.Scene {
     // Camera + parallax
     cam.scrollX = Phaser.Math.Clamp(this.bus.x - this.camLead, 0, this.level.length - GAME_W);
     this.backdrop.update(cam.scrollX, dt);
+    for (const bv of this.bridgeViews) bv.update(dt);
     this.traffic.update(dt, cam.scrollX, states);
 
     this.progressBus.x = Phaser.Math.Clamp(this.toBar(this.bus.x), 370, 860);
@@ -1964,7 +2003,6 @@ export class DriveScene extends Phaser.Scene {
   private finishRoute(): void {
     this.phase = 'finishing';
     if (startLaneChange(this.busLane, 0)) this.refreshLaneBtn();
-    this.lane.clear();
     this.gas.reset();
     this.brake.reset();
     audio.horn(this.busBody);

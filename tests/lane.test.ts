@@ -348,7 +348,7 @@ describe('nitro', () => {
   });
 });
 
-import { LANE_CHANGE_TIME, LANE_Y, createLaneMotion, occupiesLane, startLaneChange, stepLaneChange } from '../src/traffic/lanes';
+import { LANE_CHANGE_TIME, LANE_Y, collidesInLane, createLaneMotion, occupiesLane, startLaneChange, stepLaneChange } from '../src/traffic/lanes';
 
 describe('player lane changes', () => {
   it('starts settled in the main lane and occupies only that lane', () => {
@@ -393,6 +393,26 @@ describe('player lane changes', () => {
     expect(m.y).toBe(LANE_Y.main);
     expect(occupiesLane(m, 0)).toBe(true);
     expect(occupiesLane(m, 1)).toBe(false);
+  });
+
+  it('physical lane collision follows actual wheel height, preventing phantom cross-lane hits', () => {
+    expect(collidesInLane(LANE_Y.main, 0)).toBe(true);
+    expect(collidesInLane(LANE_Y.main, 1)).toBe(false);
+    expect(collidesInLane(LANE_Y.passing, 0)).toBe(false);
+    expect(collidesInLane(LANE_Y.passing, 1)).toBe(true);
+
+    // Just started changing from main to passing: still only physically in main
+    expect(collidesInLane(LANE_Y.main - 2, 0)).toBe(true);
+    expect(collidesInLane(LANE_Y.main - 2, 1)).toBe(false);
+
+    // Nearly finished changing into passing: no longer physically colliding in main
+    expect(collidesInLane(LANE_Y.passing + 4, 0)).toBe(false);
+    expect(collidesInLane(LANE_Y.passing + 4, 1)).toBe(true);
+
+    // Straddling the divider in the middle: collides in both lanes
+    const mid = (LANE_Y.main + LANE_Y.passing) / 2;
+    expect(collidesInLane(mid, 0)).toBe(true);
+    expect(collidesInLane(mid, 1)).toBe(true);
   });
 });
 

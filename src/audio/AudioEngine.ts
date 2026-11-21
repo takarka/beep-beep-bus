@@ -43,6 +43,7 @@ class AudioEngine {
   private ctx: AudioContext | null = null;
   private master!: GainNode;
   private sfxBus!: GainNode;
+  private voiceBus!: GainNode;
   private musicBus!: GainNode;
   private musicFilter!: BiquadFilterNode;
   private musicDuck!: GainNode;
@@ -59,6 +60,8 @@ class AudioEngine {
   private musicTimer: number | null = null;
   private nextNoteTime = 0;
   private step = 0;
+  private musicCache = new Map<MusicThemeId, AudioBuffer | 'missing' | 'loading'>();
+  private musicTrack: { id: MusicThemeId; src: AudioBufferSourceNode; gain: GainNode } | null = null;
 
   private wantEngine = false;
   private lastEngineSpeed = 0;
@@ -97,6 +100,10 @@ class AudioEngine {
       this.sfxBus = this.ctx.createGain();
       this.sfxBus.connect(this.master);
 
+      this.voiceBus = this.ctx.createGain();
+      this.voiceBus.gain.value = 1;
+      this.voiceBus.connect(this.master);
+
       this.musicBus = this.ctx.createGain();
       this.musicFilter = this.ctx.createBiquadFilter();
       this.musicFilter.type = 'lowpass';
@@ -109,7 +116,10 @@ class AudioEngine {
       this.bindVisibility();
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
-    if (this.wantMusic) this.ensureMusicLoop();
+    if (this.wantMusic) {
+      this.ensureMusicLoop();
+      this.ensureMusicTrack(this.musicTheme.id);
+    }
     if (this.wantEngine && !this.engine) {
       this.createEngine();
       this.setEngine(this.lastEngineSpeed);
@@ -206,13 +216,35 @@ class AudioEngine {
     src.stop(t + dur + 0.05);
   }
 
-  /** Temporarily ducks background music during fanfares or sirens. */
+  /** Temporarily ducks background music during fanfares, sirens, or voice prompts. */
   duck(factor: number, seconds: number): void {
     if (!this.ctx) return;
     const t = this.ctx.currentTime;
     this.musicDuck.gain.cancelScheduledValues(t);
     this.musicDuck.gain.setTargetAtTime(factor, t, 0.04);
     this.musicDuck.gain.setTargetAtTime(1, t + seconds, 0.25);
+  }
+
+  /** Decodes an audio file buffer (MP3/OGG/WAV) using the shared AudioContext. */
+  async decodeAudio(data: ArrayBuffer): Promise<AudioBuffer | null> {
+    if (!this.ctx) return null;
+    try {
+      return await this.ctx.decodeAudioData(data.slice(0));
+    } catch {
+      return null;
+    }
+  }
+
+  /** Plays a decoded voice prompt through the voice bus (independent of SFX mute). */
+  playVoiceBuffer(buf: AudioBuffer, vol = 0.95): AudioBufferSourceNode | null {
+    if (!this.ctx) return null;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    const g = this.ctx.createGain();
+    g.gain.value = vol;
+    src.connect(g).connect(this.voiceBus);
+    src.start();
+    return src;
   }
 
   // ---------- sound effects ----------
@@ -600,7 +632,10 @@ class AudioEngine {
   // ---------- background music ----------
   startMusic(): void {
     this.wantMusic = true;
-    if (this.ctx) this.ensureMusicLoop();
+    if (this.ctx) {
+      this.ensureMusicLoop();
+      this.ensureMusicTrack(this.musicTheme.id);
+    }
   }
 
   setMusicTheme(id: MusicThemeId, opts?: { night?: boolean }): void {
@@ -609,11 +644,77 @@ class AudioEngine {
     const changed = next.id !== this.musicTheme.id;
     this.musicTheme = next;
     this.musicNight = night;
-    if (changed) this.step = 0;
+    if (changed) {
+      this.step = 0;
+      if (this.musicTrack && this.musicTrack.id !== next.id) this.stopMusicTrack();
+    }
     if (this.ctx) {
       this.musicFilter.frequency.setTargetAtTime(night ? 1300 : 5200, this.ctx.currentTime, 0.25);
+      this.ensureMusicTrack(next.id);
     }
     this.startMusic();
+  }
+
+  private ensureMusicTrack(id: MusicThemeId): void {
+    if (!this.ctx || typeof fetch === 'undefined') return;
+    if (this.musicTrack?.id === id) return;
+    const cached = this.musicCache.get(id);
+    if (cached === 'missing' || cached === 'loading') return;
+    if (cached) {
+      this.startMusicTrack(id, cached);
+      return;
+    }
+    this.musicCache.set(id, 'loading');
+    void fetch(`./audio/music/${id}.mp3`)
+      .then(async (res) => {
+        const ct = res.headers.get('content-type') ?? '';
+        if (!res.ok || ct.includes('text/html')) {
+          this.musicCache.set(id, 'missing');
+          return;
+        }
+        const buf = await this.decodeAudio(await res.arrayBuffer());
+        if (!buf) {
+          this.musicCache.set(id, 'missing');
+          return;
+        }
+        this.musicCache.set(id, buf);
+        if (this.musicTheme.id === id && this.wantMusic) this.startMusicTrack(id, buf);
+      })
+      .catch(() => {
+        this.musicCache.set(id, 'missing');
+      });
+  }
+
+  private startMusicTrack(id: MusicThemeId, buf: AudioBuffer): void {
+    if (!this.ctx) return;
+    this.stopMusicTrack();
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = true;
+    const gain = this.ctx.createGain();
+    const t = this.ctx.currentTime;
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.linearRampToValueAtTime(1.6, t + 0.45);
+    src.connect(gain).connect(this.musicBus);
+    src.start(t);
+    this.musicTrack = { id, src, gain };
+  }
+
+  private stopMusicTrack(): void {
+    if (!this.musicTrack || !this.ctx) {
+      this.musicTrack = null;
+      return;
+    }
+    const { src, gain } = this.musicTrack;
+    const t = this.ctx.currentTime;
+    gain.gain.cancelScheduledValues(t);
+    gain.gain.setTargetAtTime(0.0001, t, 0.08);
+    try {
+      src.stop(t + 0.35);
+    } catch {
+      /* already stopped */
+    }
+    this.musicTrack = null;
   }
 
   /** 0 = calm/idle (menus, bus stop), 1 = energetic driving. */
@@ -635,6 +736,11 @@ class AudioEngine {
   private scheduleMusic(): void {
     const ctx = this.ctx;
     if (!ctx || ctx.state !== 'running') return;
+    // When an optional MP3 track is active for this theme, stay silent on the synth.
+    if (this.musicTrack && this.musicTrack.id === this.musicTheme.id) {
+      this.nextNoteTime = ctx.currentTime + 0.12;
+      return;
+    }
     // Prevent catch-up burst after long pause/backgrounding.
     if (this.nextNoteTime < ctx.currentTime - 0.3) {
       this.nextNoteTime = ctx.currentTime + 0.08;
