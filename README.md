@@ -34,7 +34,7 @@ If the child just lets go of the gas, the bus slows down smoothly by itself, so 
 | Event | Points |
 |---|---|
 | Stopped inside the yellow bus-stop zone (doors open) | **+10** |
-| Each passenger who gets on or off | **+2** |
+| Each passenger who gets on or off | **+2** (+4 bonus at their destination stop) |
 | Stopped and waited at a red light | **+5** |
 | Drove through a red light | **−10** |
 | Drove past a stop where people were waiting | **−5** |

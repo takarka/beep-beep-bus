@@ -1,6 +1,9 @@
 import { mulberry32, pick, randInt } from './rng';
 import type { LightState } from './traffic';
 
+export const STOP_PLACES = ['park', 'school', 'shop', 'circus'] as const;
+export type StopPlace = (typeof STOP_PLACES)[number];
+
 export interface StopData {
   kind: 'stop';
   /** World x the bus front should reach (± STOP_ZONE). */
@@ -8,6 +11,10 @@ export interface StopData {
   waiting: number;
   /** How many riders want to get off here (capped by who is aboard at runtime). */
   exiting: number;
+  /** Theme of this stop (park, school, shop, circus). */
+  place: StopPlace;
+  /** Destination stop theme for each waiting passenger (`destinations.length === waiting`). */
+  destinations: StopPlace[];
 }
 
 export interface LightData {
@@ -92,6 +99,16 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
   const items: LevelItem[] = [];
   let x = FIRST_ITEM_X;
   let firstLight = true;
+  // Assign each stop a theme so adjacent stops differ; later stops serve as destinations for earlier riders.
+  const placePool: StopPlace[] = [...STOP_PLACES];
+  for (let i = placePool.length - 1; i > 0; i--) {
+    const j = randInt(rng, 0, i);
+    [placePool[i], placePool[j]] = [placePool[j]!, placePool[i]!];
+  }
+  const stopPlaces = Array.from({ length: stops }, (_, i) => placePool[i % placePool.length]!);
+  const dropOnlyIdx = level >= 2 && stops >= 4 ? randInt(rng, 1, stops - 2) : -1;
+  let stopSeq = 0;
+
   for (const kind of kinds) {
     if (kind === 'light') {
       items.push({
@@ -103,7 +120,15 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
       });
       firstLight = false;
     } else {
-      items.push({ kind, zoneEnd: x, waiting: randInt(rng, 1, maxWaitingFor(level)), exiting: randInt(rng, 0, 3) });
+      const idx = stopSeq++;
+      const place = stopPlaces[idx]!;
+      const laterPlaces = stopPlaces.slice(idx + 1);
+      const isLast = idx === stops - 1;
+      const waiting = isLast || idx === dropOnlyIdx ? 0 : randInt(rng, 1, maxWaitingFor(level));
+      const destinations = Array.from({ length: waiting }, () =>
+        laterPlaces.length > 0 ? pick(rng, laterPlaces) : place,
+      );
+      items.push({ kind, zoneEnd: x, waiting, exiting: randInt(rng, 0, 3), place, destinations });
     }
     x += randInt(rng, MIN_GAP, MAX_GAP);
   }

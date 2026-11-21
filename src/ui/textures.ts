@@ -240,6 +240,15 @@ const street: Gen = (scene, env, p, key) => {
   g.fillStyle(night ? 0xc9a93a : 0xf2c230, 1);
   g.fillRect(0, 111, W, 3);
   g.fillRect(0, 117, W, 3);
+  // Bus lane "А" marking on the curb lane (visual only; all traffic still uses this lane)
+  g.lineStyle(4.5, p.roadLine, night ? 0.65 : 0.85);
+  const ax = 256;
+  g.beginPath();
+  g.moveTo(ax - 15, 176);
+  g.lineTo(ax + 2, 154);
+  g.lineTo(ax + 15, 176);
+  g.strokePath();
+  g.lineBetween(ax - 9, 168, ax + 10, 168);
   if (env.precip && env.season !== 'winter') {
     // wet road: soft puddle shines
     g.fillStyle(0xffffff, night ? 0.1 : 0.14);

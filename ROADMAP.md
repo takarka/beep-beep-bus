@@ -61,7 +61,7 @@
 - [ ] Phone testing: button sizes, safe areas (notch), fullscreen on the first tap
 - [ ] **Voice prompts** in three languages (recorded files: "Stop!", "Bus stop!", "Well done!")
 - [ ] Parent settings (behind a "hold for 3 seconds" gate): difficulty, reset progress
-- [ ] Animated passengers (walking, waving), a speech bubble with an icon of where they're going
+- [x] Animated passengers (walking, waving), a speech bubble with an icon of where they're going
 
 ## 🚀 Version 0.3: more gameplay
 
@@ -74,7 +74,7 @@
 - [x] More routes / cities after Astana (Almaty, Shymkent)
 - [x] Landmark story on each level: a short postcard or fact when it is completed
 - [x] More levels on the map (extend `core/campaign.ts`)
-- [ ] Passengers with a destination: "take me to the park", where the child picks the right stop
+- [x] Passengers with a destination: "take me to the park", where the child picks the right stop
 
 ## 🎨 Version 0.4: garage and rewards
 

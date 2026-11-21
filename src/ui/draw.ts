@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { C } from '../config';
+import type { StopPlace } from '../core/level';
 
 type G = Phaser.GameObjects.Graphics;
 
@@ -494,4 +495,74 @@ export function drawChildrenSign(g: G, x: number, y: number, r: number): void {
   g.lineBetween(x + r * 0.22, y + r * 0.16, x + r * 0.22, y + r * 0.42);
   g.lineBetween(x + r * 0.22, y + r * 0.4, x + r * 0.08, y + r * 0.58);
   g.lineBetween(x + r * 0.22, y + r * 0.4, x + r * 0.38, y + r * 0.58);
+}
+
+/** Colourful destination badge for a bus stop or passenger speech bubble (park / school / shop / circus). */
+export function drawPlaceIcon(g: G, place: StopPlace, x: number, y: number, r: number): void {
+  const bg: Record<StopPlace, number> = {
+    park: 0x5ea85b,
+    school: C.yellow,
+    shop: 0x3a86ff,
+    circus: C.red,
+  };
+  g.fillStyle(bg[place], 1);
+  g.lineStyle(Math.max(2, r * 0.14), C.ink, 1);
+  g.fillCircle(x, y, r);
+  g.strokeCircle(x, y, r);
+
+  switch (place) {
+    case 'park': {
+      // Tree trunk + lush crown + tiny flower
+      g.fillStyle(0x6b3e26, 1);
+      g.fillRect(x - r * 0.1, y + r * 0.06, r * 0.2, r * 0.44);
+      g.fillStyle(0x9be070, 1);
+      g.lineStyle(Math.max(1.5, r * 0.08), C.ink, 1);
+      g.fillCircle(x, y - r * 0.14, r * 0.42);
+      g.strokeCircle(x, y - r * 0.14, r * 0.42);
+      g.fillStyle(C.yellow, 1);
+      g.fillCircle(x + r * 0.22, y - r * 0.24, r * 0.1);
+      break;
+    }
+    case 'school': {
+      // Little schoolhouse / open book
+      g.fillStyle(C.cream, 1);
+      g.lineStyle(Math.max(1.5, r * 0.08), C.ink, 1);
+      g.fillRect(x - r * 0.44, y - r * 0.08, r * 0.88, r * 0.52);
+      g.strokeRect(x - r * 0.44, y - r * 0.08, r * 0.88, r * 0.52);
+      g.fillStyle(C.red, 1);
+      g.fillTriangle(x - r * 0.54, y - r * 0.06, x, y - r * 0.56, x + r * 0.54, y - r * 0.06);
+      g.strokeTriangle(x - r * 0.54, y - r * 0.06, x, y - r * 0.56, x + r * 0.54, y - r * 0.06);
+      g.fillStyle(C.ink, 1);
+      g.fillRect(x - r * 0.12, y + r * 0.14, r * 0.24, r * 0.3);
+      break;
+    }
+    case 'shop': {
+      // Shopping bag with handles
+      g.lineStyle(Math.max(2, r * 0.1), C.cream, 1);
+      g.beginPath();
+      g.arc(x, y - r * 0.24, r * 0.2, Math.PI, 0, false);
+      g.strokePath();
+      g.fillStyle(C.orange, 1);
+      g.lineStyle(Math.max(1.5, r * 0.08), C.ink, 1);
+      g.fillRoundedRect(x - r * 0.4, y - r * 0.22, r * 0.8, r * 0.66, r * 0.1);
+      g.strokeRoundedRect(x - r * 0.4, y - r * 0.22, r * 0.8, r * 0.66, r * 0.1);
+      g.fillStyle(C.yellow, 1);
+      g.fillCircle(x, y + r * 0.1, r * 0.14);
+      break;
+    }
+    case 'circus': {
+      // Striped circus tent
+      g.fillStyle(C.cream, 1);
+      g.lineStyle(Math.max(1.5, r * 0.08), C.ink, 1);
+      g.fillTriangle(x - r * 0.52, y + r * 0.36, x, y - r * 0.48, x + r * 0.52, y + r * 0.36);
+      g.strokeTriangle(x - r * 0.52, y + r * 0.36, x, y - r * 0.48, x + r * 0.52, y + r * 0.36);
+      g.fillStyle(C.yellow, 1);
+      g.fillTriangle(x - r * 0.18, y + r * 0.36, x, y - r * 0.48, x + r * 0.18, y + r * 0.36);
+      g.fillStyle(C.ink, 1);
+      g.fillRect(x - r * 0.1, y + r * 0.12, r * 0.2, r * 0.24);
+      g.fillStyle(C.yellow, 1);
+      g.fillCircle(x, y - r * 0.52, r * 0.09);
+      break;
+    }
+  }
 }

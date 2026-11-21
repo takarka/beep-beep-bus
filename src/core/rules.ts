@@ -1,8 +1,12 @@
+import type { StopPlace } from './level';
+
 /** Scoring and traffic rules — pure functions so they are easy to test and tune. */
 
 export const POINTS = {
   stopServed: 10,
   passenger: 2,
+  /** Bonus for dropping off a passenger at their requested destination stop. */
+  destination: 4,
   waitedAtRed: 5,
   ranRedLight: -10,
   missedStop: -5,
@@ -109,6 +113,20 @@ export class ScoreKeeper {
     this.passengersMoved++;
     return this.add(POINTS.passenger);
   }
+}
+
+/** Splits onboard passengers into those who want to get off at `place` and those staying aboard. */
+export function countMatchingDestinations(
+  aboard: readonly StopPlace[],
+  place: StopPlace,
+): { exiting: number; remaining: StopPlace[] } {
+  let exiting = 0;
+  const remaining: StopPlace[] = [];
+  for (const d of aboard) {
+    if (d === place) exiting++;
+    else remaining.push(d);
+  }
+  return { exiting, remaining };
 }
 
 /** Kid-friendly rating: always at least one star. */
