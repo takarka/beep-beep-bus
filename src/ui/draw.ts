@@ -363,6 +363,27 @@ export const Icons = {
     g.lineStyle(2, C.ink, 1);
     g.strokeRect(-s * 0.23, -s * 0.38, cell * 4, cell * 3);
   },
+  /** Postcard with a picture frame, stamp and text lines. */
+  postcard(g: G, s: number, color: number = C.cream) {
+    g.fillStyle(color, 1);
+    g.lineStyle(Math.max(2, s * 0.06), C.ink, 1);
+    g.fillRoundedRect(-s * 0.4, -s * 0.28, s * 0.8, s * 0.56, s * 0.08);
+    g.strokeRoundedRect(-s * 0.4, -s * 0.28, s * 0.8, s * 0.56, s * 0.08);
+    // picture box on the left
+    g.fillStyle(C.blue, 1);
+    g.fillRoundedRect(-s * 0.32, -s * 0.18, s * 0.32, s * 0.36, s * 0.04);
+    g.fillStyle(C.yellow, 1);
+    g.fillCircle(-s * 0.22, -s * 0.08, s * 0.06);
+    g.fillStyle(C.green, 1);
+    g.fillTriangle(-s * 0.32, s * 0.18, -s * 0.16, -s * 0.02, 0, s * 0.18);
+    // stamp in top right
+    g.fillStyle(C.red, 1);
+    g.fillRect(s * 0.18, -s * 0.2, s * 0.14, s * 0.14);
+    // text lines on the right
+    g.lineStyle(Math.max(2, s * 0.05), C.ink, 0.7);
+    g.lineBetween(s * 0.06, s * 0.04, s * 0.32, s * 0.04);
+    g.lineBetween(s * 0.06, s * 0.15, s * 0.26, s * 0.15);
+  },
   /** Gas pedal: green, with forward chevrons. */
   gas(g: G, s: number) {
     g.fillStyle(C.cream, 1);

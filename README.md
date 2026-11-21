@@ -50,13 +50,18 @@ Yellow is not penalized (the child is still learning). A yellow light never turn
 
 **Helper mode** (steering-wheel button in the menu or in the pause screen): the bus brakes by itself in front of red lights and bus stops, so even a 3–4 year old can play by just holding the gas. The first light on each level always turns red as the bus approaches, to show the rule. Stars at the end: 0 mistakes = ⭐⭐⭐, 1–2 = ⭐⭐, more = ⭐.
 
-## Campaign: the map of Astana
+## Campaign: Astana, Almaty, and Shymkent
 
-**Play** opens a map of Astana with **12 levels**, one per landmark: station, concert hall, Triumph of Astana, Khan Shatyr, Palace of Peace, Baiterek, Ak Orda, Hazrat Sultan mosque, Kazak Eli, Nur Alem, Astana Arena, airport. Only level 1 is open at first; **finishing a level opens the next**, puts a green ✓ and 1–3 stars on it, builds the road to the next landmark and drives the bus there. The panel at the top shows the total points (best score of every level) and how many levels are done. A big green **«Продолжить» / "Continue" button** in the corner starts the next level, so a small child doesn't have to aim at the right landmark (tapping a landmark works too; finished levels can be replayed to improve stars and score, a locked level just shakes). The bus waits on the road in front of the next landmark.
+**Play** opens the route map across **3 cities and 24 levels**, one per landmark:
+- **Astana (1–12):** station, concert hall, Triumph of Astana, Khan Shatyr, Palace of Peace, Baiterek, Ak Orda, Hazrat Sultan mosque, Kazak Eli, Nur Alem, Astana Arena, airport.
+- **Almaty (13–18):** Almaty station, Panfilov Park, Almaty Circus, Kok-Tobe, Medeu, Shymbulak.
+- **Shymkent (19–24):** Shymkent Airport, Shymkent Citadel, Tulip Square, Dendropark, Shymkent Zoo, Baidibek Bi.
 
-**Every level ends at its own landmark.** The finish of the route is the building from the map (station, Baiterek, Khan Shatyr, Astana Arena, ...) drawn big behind the road with a name board, dimmed with lit windows at night, and the bus announces the arrival. Drawings: `ui/landmarkScenes.ts` (big) and `ui/landmarks.ts` (map badges).
+Only level 1 is open at first; **finishing a level opens the next**, puts a green ✓ and 1–3 stars on it, builds the road to the next landmark, and drives the bus there (completing the last route of a city unlocks the next city and transitions the map). The panel at the top shows total points (best score of every level) and how many levels are done. A big green **«Продолжить» / "Continue" button** in the corner starts the next level, so a small child doesn't have to aim at the right landmark (tapping a landmark works too; finished levels can be replayed to improve stars and score, a locked level just shakes). The bus waits on the road in front of the next landmark.
 
-Levels get harder: 3 stops and 3 lights on levels 1–2, up to 8 and 8 on levels 11–12, more people waiting, and a higher speed limit (340 → 510 px/s). Levels, landmark positions and texts live in `core/campaign.ts`, `core/level.ts` and `i18n`; to add levels extend `LANDMARKS` / `MAP_NODES` and `LEVEL_COUNT`.
+**Every level ends at its own landmark and opens a postcard story.** The finish of the route is the building from the map drawn big behind the road with a name board, dimmed with lit windows at night, and the bus announces the arrival. On the result screen, a **landmark postcard** shares a kid-friendly fact about the place; the **Postcards** button on the map opens the full 24-card album to revisit any unlocked landmark story. Drawings: `ui/landmarkScenes.ts` (big) and `ui/landmarks.ts` (map badges).
+
+Levels scale smoothly across all 24 routes: 3 stops and 3 lights on levels 1–2, growing to 8 and 8 on later levels, with more people waiting and a higher speed limit across the 24 routes (340 → 510 px/s). Levels, landmark positions and texts live in `core/campaign.ts`, `core/level.ts` and `i18n`; to add levels extend `LANDMARKS` / `MAP_NODES` and `LEVEL_COUNT`.
 
 ## Pedestrians, traffic in our lane, speed bumps, the police siren
 

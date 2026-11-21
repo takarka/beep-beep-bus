@@ -48,7 +48,7 @@ const FIRST_ITEM_X = 3200;
 export const MIN_GAP = 3300;
 export const MAX_GAP = 4100;
 
-/** More stops and lights as the route goes on: 3 on levels 1–2 up to 8 on levels 11–12. */
+/** More stops and lights as the route goes on: 3 on levels 1–2 up to 8 on levels 11+. */
 export function levelCounts(level: number): { stops: number; lights: number } {
   const n = Math.min(3 + Math.floor((Math.max(1, level) - 1) / 2), 8);
   return { stops: n, lights: n };
@@ -72,8 +72,8 @@ export const childrenCountFor = (level: number): number => (level < 4 ? 0 : 1);
 /** Gas stations: none on level 1 (no petrol system yet), one on levels 2–5, two on 6–9, three after that. */
 export const stationCountFor = (level: number): number => (level < 2 ? 0 : level <= 5 ? 1 : level <= 9 ? 2 : 3);
 
-/** Bus speed limit for a level (world px/s): gentle at first, a bit faster later. */
-export const maxSpeedFor = (level: number): number => Math.min(340 + (Math.max(1, level) - 1) * 15, 510);
+/** Bus speed limit for a level (world px/s): gentle at first, rising smoothly across all 24 routes. */
+export const maxSpeedFor = (level: number): number => Math.min(340 + (Math.max(1, level) - 1) * 8, 510);
 
 /** The most people that may wait at one stop. */
 export const maxWaitingFor = (level: number): number => Math.min(3 + Math.floor(Math.max(1, level) / 3), 6);

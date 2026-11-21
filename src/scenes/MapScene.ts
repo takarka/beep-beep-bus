@@ -19,6 +19,7 @@ import { mulberry32 } from '../core/rng';
 import { t, type TextKey } from '../i18n';
 import { Icons, drawStar } from '../ui/draw';
 import { drawLandmark, drawLock } from '../ui/landmarks';
+import { drawLandmarkBig } from '../ui/landmarkScenes';
 import { Button, confetti, label } from '../ui/widgets';
 import { addAudioToggles } from './MenuScene';
 
@@ -133,61 +134,123 @@ class NodeView extends Phaser.GameObjects.Container {
   }
 }
 
-function drawMapBackground(scene: Phaser.Scene): void {
+function drawMapBackground(scene: Phaser.Scene, city: CityId): void {
   const g = scene.add.graphics().setDepth(-10);
-  const rng = mulberry32(3);
-  g.fillStyle(0xe4ecc6, 1);
+  const rng = mulberry32(city === 'astana' ? 3 : city === 'almaty' ? 17 : 29);
+  const baseBg = city === 'astana' ? 0xe4ecc6 : city === 'almaty' ? 0xdde9c2 : 0xf2e6c2;
+  const streetCol = city === 'shymkent' ? 0xfbf5e2 : 0xf3eed8;
+  g.fillStyle(baseBg, 1);
   g.fillRect(0, 0, GAME_W, GAME_H);
 
   // city blocks: a soft street grid with a few avenues
-  g.lineStyle(10, 0xf3eed8, 0.9);
+  g.lineStyle(10, streetCol, 0.9);
   for (let x = 60; x < GAME_W; x += 170) g.lineBetween(x, 0, x, GAME_H);
   for (let y = 70; y < GAME_H; y += 140) g.lineBetween(0, y, GAME_W, y);
-  g.lineStyle(14, 0xf3eed8, 0.9);
+  g.lineStyle(14, streetCol, 0.9);
   g.lineBetween(0, 700, 1280, 0);
   g.lineBetween(0, 250, 700, 720);
 
+  if (city === 'almaty') {
+    // Zailiysky Alatau snow-capped mountains along the top of the map
+    const peaks = [
+      [0, 165], [120, 48], [260, 150], [420, 34], [580, 155], [760, 24],
+      [940, 148], [1120, 38], [1280, 145],
+    ] as const;
+    const poly: Phaser.Math.Vector2[] = [new Phaser.Math.Vector2(0, 0), new Phaser.Math.Vector2(GAME_W, 0)];
+    for (let i = peaks.length - 1; i >= 0; i--) poly.push(new Phaser.Math.Vector2(peaks[i]![0], peaks[i]![1]));
+    g.fillStyle(0x9eb4cc, 0.92);
+    g.fillPoints(poly, true);
+    g.fillStyle(0xf4f8fb, 0.96);
+    for (let i = 1; i < peaks.length - 1; i += 2) {
+      const [px, py] = peaks[i]!;
+      const [lx, ly] = peaks[i - 1]!;
+      const [rx, ry] = peaks[i + 1]!;
+      g.fillTriangle(px, py, px + (lx - px) * 0.44, py + (ly - py) * 0.44, px + (rx - px) * 0.44, py + (ry - py) * 0.44);
+    }
+  }
+
   // little houses
-  const colors = [0xe98a6b, 0xf2c57c, 0x9cc5a1, 0xd4a5a5, 0xa5b4d4];
-  for (let i = 0; i < 70; i++) {
+  const colors = city === 'shymkent'
+    ? [0xe98a6b, 0xf2b56b, 0xdca06d, 0xd4a5a5, 0xf2c57c]
+    : [0xe98a6b, 0xf2c57c, 0x9cc5a1, 0xd4a5a5, 0xa5b4d4];
+  for (let i = 0; i < 65; i++) {
     const w = 18 + rng() * 22;
     const h = 16 + rng() * 18;
+    const hx = rng() * GAME_W;
+    const hy = (city === 'almaty' ? 140 : 20) + rng() * (GAME_H - (city === 'almaty' ? 160 : 40));
     g.fillStyle(colors[Math.floor(rng() * colors.length)]!, 0.5);
-    g.fillRoundedRect(rng() * GAME_W, rng() * GAME_H, w, h, 4);
+    g.fillRoundedRect(hx, hy, w, h, 4);
   }
 
-  // parks
-  g.fillStyle(0xbfdc98, 1);
-  for (const [x, y, w, h] of [[220, 120, 200, 90], [760, 600, 220, 90], [1060, 250, 220, 120], [60, 440, 160, 100], [520, 330, 140, 70]] as const) {
-    g.fillEllipse(x, y, w, h);
-    g.fillStyle(0x9ccb7a, 1);
-    for (let i = 0; i < 6; i++) g.fillCircle(x + (rng() - 0.5) * w * 0.7, y + (rng() - 0.5) * h * 0.6, 7 + rng() * 5);
+  // parks & orchards
+  const parks = city === 'astana'
+    ? [[220, 120, 200, 90], [760, 600, 220, 90], [1060, 250, 220, 120], [60, 440, 160, 100], [520, 330, 140, 70]]
+    : city === 'almaty'
+      ? [[180, 260, 180, 100], [560, 340, 190, 95], [1060, 270, 200, 110], [260, 620, 210, 90], [920, 600, 220, 100]]
+      : [[950, 430, 250, 150], [720, 265, 200, 110], [220, 220, 190, 95], [1060, 190, 170, 90], [260, 630, 210, 90]];
+  for (const [x, y, w, h] of parks) {
     g.fillStyle(0xbfdc98, 1);
+    g.fillEllipse(x!, y!, w!, h!);
+    g.fillStyle(0x9ccb7a, 1);
+    for (let i = 0; i < 6; i++) g.fillCircle(x! + (rng() - 0.5) * w! * 0.7, y! + (rng() - 0.5) * h! * 0.6, 7 + rng() * 5);
+    if (city === 'almaty') {
+      g.fillStyle(0xe63946, 0.85);
+      for (let i = 0; i < 5; i++) g.fillCircle(x! + (rng() - 0.5) * w! * 0.6, y! + (rng() - 0.5) * h! * 0.5, 3.2);
+    }
   }
 
-  // the Ishim (Esil) river
-  const riverY = (x: number) => 322 + Math.sin(x / 210 + 0.5) * 62 + (x / GAME_W) * 24;
-  const top: Phaser.Math.Vector2[] = [];
-  const bottom: Phaser.Math.Vector2[] = [];
-  for (let x = -20; x <= GAME_W + 20; x += 20) {
-    top.push(new Phaser.Math.Vector2(x, riverY(x) - 34));
-    bottom.push(new Phaser.Math.Vector2(x, riverY(x) + 34));
+  if (city === 'shymkent') {
+    // Sunny tulip meadows
+    for (const [tx, ty] of [[680, 560], [270, 380], [1060, 560], [540, 160]] as const) {
+      for (let i = 0; i < 9; i++) {
+        g.fillStyle(i % 2 === 0 ? C.red : C.yellow, 0.85);
+        g.fillCircle(tx + (rng() - 0.5) * 90, ty + (rng() - 0.5) * 44, 4);
+      }
+    }
   }
-  g.fillStyle(0x8fd0e8, 1);
-  g.fillPoints([...top, ...bottom.slice().reverse()], true);
-  g.lineStyle(5, 0x5fb0d0, 1);
-  g.strokePoints(top, false, false);
-  g.strokePoints(bottom, false, false);
-  g.lineStyle(4, 0xffffff, 0.55);
-  for (let x = 40; x < GAME_W; x += 130) {
-    g.beginPath();
-    g.moveTo(x, riverY(x) - 6);
-    g.lineTo(x + 26, riverY(x + 26) - 10);
-    g.strokePath();
-    g.beginPath();
-    g.moveTo(x + 50, riverY(x + 50) + 12);
-    g.lineTo(x + 74, riverY(x + 74) + 8);
-    g.strokePath();
+
+  // City river
+  if (city === 'almaty') {
+    // Malaya Almatinka flowing down from the mountains
+    const riverX = (y: number) => 850 - y * 0.42 + Math.sin(y / 115) * 48;
+    const left: Phaser.Math.Vector2[] = [];
+    const right: Phaser.Math.Vector2[] = [];
+    for (let y = 110; y <= GAME_H + 20; y += 20) {
+      left.push(new Phaser.Math.Vector2(riverX(y) - 24, y));
+      right.push(new Phaser.Math.Vector2(riverX(y) + 24, y));
+    }
+    g.fillStyle(0x8fd0e8, 1);
+    g.fillPoints([...left, ...right.slice().reverse()], true);
+    g.lineStyle(4, 0x5fb0d0, 1);
+    g.strokePoints(left, false, false);
+    g.strokePoints(right, false, false);
+  } else {
+    const riverY = city === 'astana'
+      ? (x: number) => 322 + Math.sin(x / 210 + 0.5) * 62 + (x / GAME_W) * 24
+      : (x: number) => 475 - (x / GAME_W) * 165 + Math.sin(x / 190 + 0.4) * 44;
+    const half = city === 'astana' ? 34 : 24;
+    const top: Phaser.Math.Vector2[] = [];
+    const bottom: Phaser.Math.Vector2[] = [];
+    for (let x = -20; x <= GAME_W + 20; x += 20) {
+      top.push(new Phaser.Math.Vector2(x, riverY(x) - half));
+      bottom.push(new Phaser.Math.Vector2(x, riverY(x) + half));
+    }
+    g.fillStyle(0x8fd0e8, 1);
+    g.fillPoints([...top, ...bottom.slice().reverse()], true);
+    g.lineStyle(5, 0x5fb0d0, 1);
+    g.strokePoints(top, false, false);
+    g.strokePoints(bottom, false, false);
+    g.lineStyle(4, 0xffffff, 0.55);
+    for (let x = 40; x < GAME_W; x += 130) {
+      g.beginPath();
+      g.moveTo(x, riverY(x) - 6);
+      g.lineTo(x + 26, riverY(x + 26) - 10);
+      g.strokePath();
+      g.beginPath();
+      g.moveTo(x + 50, riverY(x + 50) + 12);
+      g.lineTo(x + 74, riverY(x + 74) + 8);
+      g.strokePath();
+    }
   }
 
   // paper frame + compass
@@ -227,13 +290,14 @@ const segPoints = (i: number): Phaser.Math.Vector2[] => segment(i).getPoints(60)
 /** Where the bus waits in front of a landmark: on the road just outside its badge. */
 function restPoint(index: number): { x: number; y: number; seg: number; at: number } {
   const node = MAP_NODES[index]!;
-  if (index > 0) {
+  const firstIndex = CITY_RANGES[cityForLevel(index + 1)].start - 1;
+  if (index > firstIndex) {
     const pts = segPoints(index - 1);
     for (let i = pts.length - 1; i >= 0; i--) {
       if (Math.hypot(pts[i]!.x - node.x, pts[i]!.y - node.y) >= R + 64) return { x: pts[i]!.x, y: pts[i]!.y, seg: index - 1, at: i };
     }
   }
-  // the first landmark has no road before it: park above the badge
+  // the first landmark of a city has no road before it: park above the badge
   return { x: node.x, y: node.y - R - 12, seg: -1, at: 0 };
 }
 
@@ -254,7 +318,7 @@ function drawRoad(g: G, curve: Phaser.Curves.QuadraticBezier, built: boolean): v
   }
 }
 
-/** The campaign map of Astana: every level is a landmark; finished ones get stars and a check mark. */
+/** The campaign map across Astana, Almaty, and Shymkent: every level is a landmark with stars and a postcard story. */
 export class MapScene extends Phaser.Scene {
   private nodes: NodeView[] = [];
   private bus!: BusView;
@@ -265,6 +329,7 @@ export class MapScene extends Phaser.Scene {
   private countText!: Phaser.GameObjects.Text;
   private playBtn!: Button;
   private city: CityId = 'astana';
+  private postcardModal: Phaser.GameObjects.Container | null = null;
 
   constructor() {
     super('Map');
@@ -275,12 +340,13 @@ export class MapScene extends Phaser.Scene {
     this.nodes = [];
     this.moving = false;
     this.busy = false;
+    this.postcardModal = null;
     const progress = loadProgress();
     // A level that was just completed for the first time gets a stamp + the bus drives on to the next one.
     const cel = data?.celebrate && isCompleted(progress, data.celebrate) ? data.celebrate : 0;
     this.city = data?.city ?? cityForLevel(cel || progress.level);
 
-    drawMapBackground(this);
+    drawMapBackground(this, this.city);
     this.createRoads(progress, cel);
     this.createNodes(progress, cel);
     this.createHud(progress, cel);
@@ -288,7 +354,9 @@ export class MapScene extends Phaser.Scene {
     this.createPlayButton(progress, cel);
 
     const kb = this.input.keyboard;
-    kb?.on('keydown-ENTER', () => this.playNext(progress));
+    kb?.on('keydown-ENTER', () => {
+      if (!this.postcardModal) this.playNext(progress);
+    });
 
     if (cel) this.celebrate(progress, cel);
   }
@@ -323,17 +391,34 @@ export class MapScene extends Phaser.Scene {
   private createHud(p: Progress, cel: number): void {
     new Button(this, 56, 52, { r: 34, color: C.red, icon: (g, s) => Icons.home(g, s), onClick: () => this.scene.start('Menu') });
     new Button(this, 140, 52, { r: 34, color: C.purple, icon: (g, s) => Icons.bus(g, s), onClick: () => this.scene.start('Garage') });
+    new Button(this, 224, 52, {
+      r: 34,
+      color: C.blue,
+      icon: (g, s) => Icons.postcard(g, s),
+      onClick: () => {
+        if (this.busy || this.postcardModal) return;
+        const { start, end } = CITY_RANGES[this.city];
+        let initial = start;
+        for (let l = start; l <= end; l++) if (isCompleted(p, l) && l !== cel) initial = l;
+        this.openPostcards(initial);
+      },
+    });
     addAudioToggles(this, GAME_W - 56, 52);
     CITIES.forEach((c, idx) => {
       const active = c === this.city;
+      const range = CITY_RANGES[c];
+      let doneInCity = 0;
+      for (let l = range.start; l <= range.end; l++) if (isCompleted(p, l) && l !== cel) doneInCity++;
+      const totalInCity = range.end - range.start + 1;
+      const unlocked = isUnlocked(p, range.start) && !(cel > 0 && range.start === cel + 1);
       const b = new Button(this, GAME_W / 2 - 170 + idx * 170, 50, {
         w: 156,
         h: 50,
-        color: active ? C.yellow : C.cream,
-        text: t(c),
-        textSize: 22,
+        color: active ? C.yellow : unlocked ? C.cream : 0xd8d2c4,
+        text: doneInCity === totalInCity ? `${t(c)} ✓` : t(c),
+        textSize: 20,
         onClick: () => {
-          if (!this.busy && c !== this.city) this.scene.restart({ city: c });
+          if (!this.busy && !this.postcardModal && c !== this.city) this.scene.restart({ city: c });
         },
       });
       b.setSelected(active);
@@ -382,6 +467,120 @@ export class MapScene extends Phaser.Scene {
     miniBar(166, fk, st.fuel <= LOW_FUEL ? C.red : fk >= 0.5 ? 0x3a86ff : C.yellow, (g) => Icons.pump(g, 24, C.ink));
   }
 
+  private openPostcards(startLevel: number): void {
+    const p = loadProgress();
+    let lvl = Math.max(1, Math.min(LEVEL_COUNT, startLevel));
+    this.postcardModal?.destroy();
+    const modal = this.add.container(0, 0).setDepth(120);
+    this.postcardModal = modal;
+
+    const shade = this.add.rectangle(GAME_W / 2, GAME_H / 2, GAME_W, GAME_H, 0x1b2048, 0.65).setInteractive();
+    const cx = GAME_W / 2;
+    const cy = GAME_H / 2;
+    const cardHit = this.add.rectangle(cx, cy, 860, 540, 0x000000, 0).setInteractive();
+    const cardBg = this.add.graphics();
+    cardBg.fillStyle(0xfff8e7, 1);
+    cardBg.fillRoundedRect(cx - 430, cy - 270, 860, 540, 28);
+    cardBg.lineStyle(6, C.ink, 1);
+    cardBg.strokeRoundedRect(cx - 430, cy - 270, 860, 540, 28);
+    // Illustration frame
+    cardBg.fillStyle(0xe6f3f9, 1);
+    cardBg.fillRoundedRect(cx - 400, cy - 176, 440, 300, 20);
+    cardBg.lineStyle(4, C.ink, 0.9);
+    cardBg.strokeRoundedRect(cx - 400, cy - 176, 440, 300, 20);
+
+    const content = this.add.container(0, 0);
+    const close = () => {
+      this.input.keyboard?.off('keydown-LEFT', onLeft);
+      this.input.keyboard?.off('keydown-RIGHT', onRight);
+      this.input.keyboard?.off('keydown-ESC', close);
+      modal.destroy();
+      if (this.postcardModal === modal) this.postcardModal = null;
+    };
+    shade.on('pointerup', close);
+
+    const closeBtn = new Button(this, cx + 388, cy - 230, { r: 28, color: C.red, icon: (g, s) => Icons.cross(g, s), onClick: close });
+    const prevBtn = new Button(this, cx - 350, cy + 195, {
+      r: 36,
+      color: C.orange,
+      icon: (g, s) => Icons.arrowLeft(g, s),
+      onClick: () => render(lvl === 1 ? LEVEL_COUNT : lvl - 1),
+    });
+    const nextBtn = new Button(this, cx - 250, cy + 195, {
+      r: 36,
+      color: C.orange,
+      icon: (g, s) => Icons.arrowRight(g, s),
+      onClick: () => render(lvl === LEVEL_COUNT ? 1 : lvl + 1),
+    });
+
+    const render = (nextLvl: number) => {
+      lvl = nextLvl;
+      content.removeAll(true);
+      const landmark = MAP_NODES[lvl - 1]!.landmark;
+      const city = cityForLevel(lvl);
+      const done = isCompleted(p, lvl);
+      const unlocked = isUnlocked(p, lvl);
+      const stars = p.stars[String(lvl)] ?? 0;
+
+      // City pill in top-left of card
+      const cityLabel = label(this, cx - 392, cy - 228, t(city), { size: 20, color: C.cream, strokeThickness: 0 }).setOrigin(0, 0.5);
+      const stamp = this.add.graphics();
+      stamp.fillStyle(C.blue, 1);
+      stamp.fillRoundedRect(cx - 404, cy - 246, cityLabel.width + 24, 36, 12);
+      stamp.lineStyle(3, C.ink, 1);
+      stamp.strokeRoundedRect(cx - 404, cy - 246, cityLabel.width + 24, 36, 12);
+      const header = label(this, cx, cy - 228, `${t('postcards')} · ${lvl}/${LEVEL_COUNT}`, { size: 28, color: C.ink, strokeThickness: 0 });
+
+      const lmG = this.add.graphics({ x: cx - 180, y: cy + 106 }).setScale(0.76);
+      drawLandmarkBig(lmG, landmark, false);
+      content.add([stamp, cityLabel, header, lmG]);
+
+      if (!done) {
+        lmG.setAlpha(0.22);
+        const lockG = this.add.graphics({ x: cx - 180, y: cy - 26 });
+        drawLock(lockG, 72);
+        content.add(lockG);
+      }
+
+      const rx = cx + 230;
+      const title = label(this, rx, cy - 128, t(`lm_${landmark}` as TextKey), { size: 28, color: C.blue, strokeThickness: 0, wrap: 310 });
+      const starsG = this.add.graphics();
+      for (let i = 0; i < 3; i++) drawStar(starsG, rx + (i - 1) * 46, cy - 68, 17, i < stars ? C.yellow : 0xd9cfbf, C.ink, 3);
+      const story = label(this, rx, cy + 28, done ? t(`fact_${landmark}` as TextKey) : t('lockedFact'), {
+        size: 22,
+        color: C.ink,
+        strokeThickness: 0,
+        wrap: 310,
+      });
+      const countLbl = label(this, cx - 120, cy + 195, `${completedCount(p)}/${LEVEL_COUNT}`, { size: 24, color: C.ink, strokeThickness: 0 });
+      content.add([title, starsG, story, countLbl]);
+
+      if (unlocked) {
+        const goBtn = new Button(this, rx, cy + 186, {
+          w: 220,
+          h: 68,
+          color: C.green,
+          text: t('go'),
+          textSize: 28,
+          onClick: () => {
+            close();
+            this.play(lvl);
+          },
+        });
+        content.add(goBtn);
+      }
+    };
+
+    const onLeft = () => render(lvl === 1 ? LEVEL_COUNT : lvl - 1);
+    const onRight = () => render(lvl === LEVEL_COUNT ? 1 : lvl + 1);
+    this.input.keyboard?.on('keydown-LEFT', onLeft);
+    this.input.keyboard?.on('keydown-RIGHT', onRight);
+    this.input.keyboard?.on('keydown-ESC', close);
+
+    modal.add([shade, cardHit, cardBg, content, closeBtn, prevBtn, nextBtn]);
+    render(lvl);
+  }
+
   private createBus(p: Progress, cel: number): void {
     const design = loadDesign() ?? { ...DEFAULT_DESIGN };
     this.busScale = BUS_LEN / BODY_SIZE[design.body].L;
@@ -426,11 +625,12 @@ export class MapScene extends Phaser.Scene {
 
   /** The level that comes next: the highlighted one, or the last level once everything is done. */
   private playNext(p: Progress): void {
+    if (this.postcardModal) return;
     this.play(this.nodes.find((n) => n.state === 'current')?.level ?? p.level);
   }
 
   private onTap(nv: NodeView): void {
-    if (this.busy) return;
+    if (this.busy || this.postcardModal) return;
     if (nv.state === 'locked') {
       audio.oops();
       nv.shake();
@@ -469,10 +669,22 @@ export class MapScene extends Phaser.Scene {
       return;
     }
     if (cel >= end) {
-      this.time.delayedCall(1500, () => {
-        this.busy = false;
-        this.revealPlay();
+      const nextCity = cityForLevel(cel + 1);
+      this.time.delayedCall(1400, () => {
+        audio.fanfare();
+        confetti(this, GAME_W / 2, GAME_H, 80);
+        const banner = this.add.container(GAME_W / 2, 330).setDepth(100).setScale(0);
+        const msg = label(this, 0, 0, `${t('cityUnlocked')} ${t(nextCity)}`, { size: 42, color: C.yellow, strokeThickness: 8 });
+        const w = msg.width + 80;
+        const g = this.add.graphics();
+        g.fillStyle(C.green, 1);
+        g.fillRoundedRect(-w / 2, -52, w, 104, 28);
+        g.lineStyle(6, C.ink, 1);
+        g.strokeRoundedRect(-w / 2, -52, w, 104, 28);
+        banner.add([g, msg]);
+        this.tweens.add({ targets: banner, scale: 1, duration: 450, ease: 'Back.easeOut' });
       });
+      this.time.delayedCall(3200, () => this.scene.restart({ city: nextCity }));
       return;
     }
     this.time.delayedCall(1700, () => {

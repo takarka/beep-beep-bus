@@ -43,17 +43,34 @@ describe('campaign map', () => {
     expect(landmarkForLevel(0)).toBe(landmarkForLevel(LEVEL_COUNT)); // never crashes on odd input
   });
 
-  it('names and describes every landmark in every language', () => {
-    for (const lang of Object.values(DICTS))
+  it('names and describes every landmark and city UI strings in every language', () => {
+    for (const lang of Object.values(DICTS)) {
       for (const id of LANDMARKS) {
         expect(lang[`lm_${id}` as keyof typeof lang].trim()).not.toBe('');
         expect(lang[`fact_${id}` as keyof typeof lang].trim()).not.toBe('');
       }
+      for (const city of CITIES) expect(lang[city].trim()).not.toBe('');
+      expect(lang.postcards.trim()).not.toBe('');
+      expect(lang.lockedFact.trim()).not.toBe('');
+      expect(lang.cityUnlocked.trim()).not.toBe('');
+    }
+  });
+
+  it('covers all 24 levels across cities without gaps or overlaps', () => {
+    const covered: number[] = [];
+    for (const city of CITIES) {
+      const { start, end } = CITY_RANGES[city];
+      for (let l = start; l <= end; l++) {
+        covered.push(l);
+        expect(cityForLevel(l)).toBe(city);
+      }
+    }
+    expect(covered).toEqual(Array.from({ length: LEVEL_COUNT }, (_, i) => i + 1));
   });
 });
 
 describe('level difficulty', () => {
-  it('grows with the level, up to a cap', () => {
+  it('grows smoothly with the level, up to a cap', () => {
     expect(levelCounts(1).stops).toBe(3);
     expect(levelCounts(LEVEL_COUNT).stops).toBe(8);
     for (let l = 2; l <= LEVEL_COUNT; l++) {
@@ -61,6 +78,7 @@ describe('level difficulty', () => {
       expect(maxSpeedFor(l)).toBeGreaterThanOrEqual(maxSpeedFor(l - 1));
     }
     expect(maxSpeedFor(1)).toBe(340);
+    expect(maxSpeedFor(LEVEL_COUNT)).toBeLessThanOrEqual(510);
     expect(maxSpeedFor(99)).toBeLessThanOrEqual(510);
     expect(generateLevel(12).items.length).toBeGreaterThan(generateLevel(1).items.length);
   });

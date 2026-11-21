@@ -1,4 +1,5 @@
 import { mix } from '../config';
+import type { CityId } from './campaign';
 
 /** The setting of a route: which season, day or night, and whether it rains / snows. */
 export const SEASONS = ['summer', 'autumn', 'winter', 'spring'] as const;
@@ -13,6 +14,8 @@ export interface Env {
   precip: boolean;
   /** Soft mist across the road. */
   fog?: boolean;
+  /** Optional city theme for route scenery. */
+  city?: CityId;
 }
 
 /** What the child picked on the weather screen. `auto` = the setting changes with the level. */
@@ -60,7 +63,7 @@ export function resolveEnv(level: number, world: WorldSetting): Env {
 
 export const precipKind = (env: Env): 'rain' | 'snow' => (env.season === 'winter' ? 'snow' : 'rain');
 
-export const envKey = (env: Env): string => `${env.season}_${env.time}`;
+export const envKey = (env: Env): string => `${env.season}_${env.time}${env.city ? `_${env.city}` : ''}`;
 
 // ---------------------------------------------------------------- colours
 

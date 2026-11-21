@@ -24,7 +24,7 @@ import { t, type TextKey } from '../i18n';
 import { Icons, drawChildrenSign, drawCrosswalkSign, drawMiniLight, drawRoadStopSign, drawStar, drawStopSign } from '../ui/draw';
 import { GROUND_Y, PASSENGER_VARIANTS, SIDEWALK_FEET_Y, STREET_Y } from '../ui/textures';
 import { createScenery } from '../ui/scenery';
-import { landmarkForLevel } from '../core/campaign';
+import { cityForLevel, landmarkForLevel } from '../core/campaign';
 import { drawLandmark } from '../ui/landmarks';
 import { drawLandmarkBig } from '../ui/landmarkScenes';
 import { TrafficManager } from '../traffic/TrafficManager';
@@ -229,7 +229,7 @@ export class DriveScene extends Phaser.Scene {
   create(): void {
     this.cameras.main.fadeIn(300, 45, 42, 50);
     this.cameras.main.setBounds(0, 0, this.level.length, GAME_H);
-    const env = resolveEnv(this.level.level, getSettings().world);
+    const env = { ...resolveEnv(this.level.level, getSettings().world), city: cityForLevel(this.level.level) };
     this.backdrop = createScenery(this, env);
 
     const design = loadDesign() ?? { ...DEFAULT_DESIGN };
