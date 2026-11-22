@@ -149,6 +149,8 @@ export class FactoryScene extends Phaser.Scene {
     this.stepDots = [];
     const garage = loadGarage();
     this.design = garage.slots[this.slot] ?? { ...DEFAULT_DESIGN };
+    audio.setMusicTheme('menu');
+    audio.setMusicIntensity(0.4);
     this.cameras.main.fadeIn(250, 45, 42, 50);
 
     drawFactory(this);
@@ -393,7 +395,7 @@ export class FactoryScene extends Phaser.Scene {
     this.tweens.add({ targets: msg, scale: { from: 0, to: 1 }, duration: 500, ease: 'Back.easeOut' });
 
     this.time.delayedCall(1300, () => {
-      audio.horn();
+      audio.horn(this.design.body);
       this.tweens.add({ targets: this.bus, x: GAME_W + 400, duration: 1500, ease: 'Cubic.easeIn' });
       this.events.on('update', (_t: number, dt: number) => this.bus.roll(dt * 0.6, dt / 1000, 0.8));
     });

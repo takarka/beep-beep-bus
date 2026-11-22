@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LANDMARKS, LEVEL_COUNT, MAP_NODES, landmarkForLevel } from '../src/core/campaign';
+import { CITIES, CITY_RANGES, LANDMARKS, LEVEL_COUNT, MAP_NODES, cityForLevel, landmarkForLevel } from '../src/core/campaign';
 import { DICTS } from '../src/i18n';
 import { generateLevel, levelCounts, maxSpeedFor } from '../src/core/level';
 import {
@@ -25,9 +25,16 @@ describe('campaign map', () => {
       expect(n.y).toBeGreaterThan(150);
       expect(n.y).toBeLessThan(620);
     }
-    for (let i = 0; i < MAP_NODES.length; i++)
-      for (let j = i + 1; j < MAP_NODES.length; j++)
-        expect(Math.hypot(MAP_NODES[i]!.x - MAP_NODES[j]!.x, MAP_NODES[i]!.y - MAP_NODES[j]!.y)).toBeGreaterThan(170);
+    for (const city of CITIES) {
+      const { start, end } = CITY_RANGES[city];
+      const nodes = MAP_NODES.slice(start - 1, end);
+      for (let i = 0; i < nodes.length; i++)
+        for (let j = i + 1; j < nodes.length; j++)
+          expect(Math.hypot(nodes[i]!.x - nodes[j]!.x, nodes[i]!.y - nodes[j]!.y)).toBeGreaterThan(170);
+    }
+    expect(cityForLevel(1)).toBe('astana');
+    expect(cityForLevel(13)).toBe('almaty');
+    expect(cityForLevel(20)).toBe('shymkent');
   });
 
   it('every level finishes at its own landmark', () => {
@@ -36,14 +43,34 @@ describe('campaign map', () => {
     expect(landmarkForLevel(0)).toBe(landmarkForLevel(LEVEL_COUNT)); // never crashes on odd input
   });
 
-  it('names every landmark in every language', () => {
-    for (const lang of Object.values(DICTS))
-      for (const id of LANDMARKS) expect(lang[`lm_${id}` as keyof typeof lang].trim()).not.toBe('');
+  it('names and describes every landmark and city UI strings in every language', () => {
+    for (const lang of Object.values(DICTS)) {
+      for (const id of LANDMARKS) {
+        expect(lang[`lm_${id}` as keyof typeof lang].trim()).not.toBe('');
+        expect(lang[`fact_${id}` as keyof typeof lang].trim()).not.toBe('');
+      }
+      for (const city of CITIES) expect(lang[city].trim()).not.toBe('');
+      expect(lang.postcards.trim()).not.toBe('');
+      expect(lang.lockedFact.trim()).not.toBe('');
+      expect(lang.cityUnlocked.trim()).not.toBe('');
+    }
+  });
+
+  it('covers all 24 levels across cities without gaps or overlaps', () => {
+    const covered: number[] = [];
+    for (const city of CITIES) {
+      const { start, end } = CITY_RANGES[city];
+      for (let l = start; l <= end; l++) {
+        covered.push(l);
+        expect(cityForLevel(l)).toBe(city);
+      }
+    }
+    expect(covered).toEqual(Array.from({ length: LEVEL_COUNT }, (_, i) => i + 1));
   });
 });
 
 describe('level difficulty', () => {
-  it('grows with the level, up to a cap', () => {
+  it('grows smoothly with the level, up to a cap', () => {
     expect(levelCounts(1).stops).toBe(3);
     expect(levelCounts(LEVEL_COUNT).stops).toBe(8);
     for (let l = 2; l <= LEVEL_COUNT; l++) {
@@ -51,6 +78,7 @@ describe('level difficulty', () => {
       expect(maxSpeedFor(l)).toBeGreaterThanOrEqual(maxSpeedFor(l - 1));
     }
     expect(maxSpeedFor(1)).toBe(340);
+    expect(maxSpeedFor(LEVEL_COUNT)).toBeLessThanOrEqual(510);
     expect(maxSpeedFor(99)).toBeLessThanOrEqual(510);
     expect(generateLevel(12).items.length).toBeGreaterThan(generateLevel(1).items.length);
   });

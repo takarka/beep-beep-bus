@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { C } from '../config';
+import type { StopPlace } from '../core/level';
 
 type G = Phaser.GameObjects.Graphics;
 
@@ -90,6 +91,18 @@ export const Icons = {
       g.lineBetween(-s * 0.38, -s * 0.38, s * 0.38, s * 0.38);
     }
   },
+  voice(g: G, s: number, on: boolean, color: number = C.cream) {
+    // Speech bubble with little dots inside
+    g.fillStyle(color, 1);
+    g.fillRoundedRect(-s * 0.34, -s * 0.28, s * 0.68, s * 0.44, s * 0.14);
+    g.fillTriangle(-s * 0.14, s * 0.14, -s * 0.26, s * 0.34, s * 0.04, s * 0.14);
+    g.fillStyle(C.ink, 0.75);
+    for (const dx of [-0.15, 0, 0.15]) g.fillCircle(s * dx, -s * 0.06, s * 0.045);
+    if (!on) {
+      g.lineStyle(s * 0.08, C.red, 1);
+      g.lineBetween(-s * 0.38, -s * 0.38, s * 0.38, s * 0.38);
+    }
+  },
   retry(g: G, s: number, color: number = C.cream) {
     g.lineStyle(s * 0.12, color, 1);
     g.beginPath();
@@ -158,6 +171,13 @@ export const Icons = {
     } else {
       g.lineStyle(s * 0.06, 0x9ad0ff, 1);
       for (const x of [-0.18, 0, 0.18]) g.lineBetween(x * s + s * 0.04, s * 0.14, x * s - s * 0.04, s * 0.32);
+    }
+  },
+  /** Horizontal mist bars for the fog toggle. */
+  fog(g: G, s: number) {
+    g.fillStyle(0xffffff, 0.92);
+    for (const [y, w] of [[-0.2, 0.56], [0, 0.7], [0.2, 0.48]] as const) {
+      g.fillRoundedRect(-s * (w / 2), s * y - s * 0.055, s * w, s * 0.11, s * 0.055);
     }
   },
   /** Sun peeking out from behind a cloud: the "weather" menu button. */
@@ -356,6 +376,27 @@ export const Icons = {
     g.lineStyle(2, C.ink, 1);
     g.strokeRect(-s * 0.23, -s * 0.38, cell * 4, cell * 3);
   },
+  /** Postcard with a picture frame, stamp and text lines. */
+  postcard(g: G, s: number, color: number = C.cream) {
+    g.fillStyle(color, 1);
+    g.lineStyle(Math.max(2, s * 0.06), C.ink, 1);
+    g.fillRoundedRect(-s * 0.4, -s * 0.28, s * 0.8, s * 0.56, s * 0.08);
+    g.strokeRoundedRect(-s * 0.4, -s * 0.28, s * 0.8, s * 0.56, s * 0.08);
+    // picture box on the left
+    g.fillStyle(C.blue, 1);
+    g.fillRoundedRect(-s * 0.32, -s * 0.18, s * 0.32, s * 0.36, s * 0.04);
+    g.fillStyle(C.yellow, 1);
+    g.fillCircle(-s * 0.22, -s * 0.08, s * 0.06);
+    g.fillStyle(C.green, 1);
+    g.fillTriangle(-s * 0.32, s * 0.18, -s * 0.16, -s * 0.02, 0, s * 0.18);
+    // stamp in top right
+    g.fillStyle(C.red, 1);
+    g.fillRect(s * 0.18, -s * 0.2, s * 0.14, s * 0.14);
+    // text lines on the right
+    g.lineStyle(Math.max(2, s * 0.05), C.ink, 0.7);
+    g.lineBetween(s * 0.06, s * 0.04, s * 0.32, s * 0.04);
+    g.lineBetween(s * 0.06, s * 0.15, s * 0.26, s * 0.15);
+  },
   /** Gas pedal: green, with forward chevrons. */
   gas(g: G, s: number) {
     g.fillStyle(C.cream, 1);
@@ -408,4 +449,132 @@ export function drawStopSign(g: G, x: number, y: number, r: number): void {
   g.fillStyle(C.cream, 1);
   g.fillCircle(x - r * 0.32, y + r * 0.3, r * 0.14);
   g.fillCircle(x + r * 0.32, y + r * 0.3, r * 0.14);
+}
+
+/** Blue square pedestrian-crossing sign with a white triangle and a walking figure. */
+export function drawCrosswalkSign(g: G, x: number, y: number, r: number): void {
+  g.fillStyle(C.blue, 1);
+  g.lineStyle(4, C.ink, 1);
+  g.fillRoundedRect(x - r, y - r, r * 2, r * 2, r * 0.25);
+  g.strokeRoundedRect(x - r, y - r, r * 2, r * 2, r * 0.25);
+  g.fillStyle(C.cream, 1);
+  g.fillTriangle(x, y - r * 0.72, x + r * 0.72, y + r * 0.65, x - r * 0.72, y + r * 0.65);
+  // little walking person inside
+  g.fillStyle(C.ink, 1);
+  g.fillCircle(x, y - r * 0.2, r * 0.14);
+  g.lineStyle(Math.max(2, r * 0.13), C.ink, 1);
+  g.lineBetween(x, y - r * 0.06, x, y + r * 0.28);
+  g.lineBetween(x, y + r * 0.26, x - r * 0.18, y + r * 0.56);
+  g.lineBetween(x, y + r * 0.26, x + r * 0.18, y + r * 0.56);
+  g.lineBetween(x - r * 0.16, y + r * 0.1, x + r * 0.16, y + r * 0.04);
+}
+
+/** Red octagonal STOP road sign with a crisp white rim. */
+export function drawRoadStopSign(g: G, x: number, y: number, r: number): void {
+  const pts: Array<{ x: number; y: number }> = [];
+  for (let i = 0; i < 8; i++) {
+    const a = ((i + 0.5) * Math.PI) / 4;
+    pts.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r });
+  }
+  g.fillStyle(C.red, 1);
+  g.lineStyle(4, C.ink, 1);
+  g.fillPoints(pts, true);
+  g.strokePoints(pts, true, true);
+  const inner = pts.map((p) => ({ x: x + (p.x - x) * 0.84, y: y + (p.y - y) * 0.84 }));
+  g.lineStyle(Math.max(2, r * 0.1), C.cream, 1);
+  g.strokePoints(inner, true, true);
+}
+
+/** Triangular warning sign with two little running children. */
+export function drawChildrenSign(g: G, x: number, y: number, r: number): void {
+  const pts = [
+    { x, y: y - r },
+    { x: x + r * 0.96, y: y + r * 0.78 },
+    { x: x - r * 0.96, y: y + r * 0.78 },
+  ];
+  g.fillStyle(C.cream, 1);
+  g.lineStyle(Math.max(4, r * 0.18), C.red, 1);
+  g.fillPoints(pts, true);
+  g.strokePoints(pts, true, true);
+  // two silhouettes inside
+  g.fillStyle(C.ink, 1);
+  g.fillCircle(x - r * 0.2, y - r * 0.05, r * 0.13);
+  g.fillCircle(x + r * 0.22, y + r * 0.05, r * 0.11);
+  g.lineStyle(Math.max(2, r * 0.11), C.ink, 1);
+  g.lineBetween(x - r * 0.2, y + r * 0.08, x - r * 0.2, y + r * 0.36);
+  g.lineBetween(x - r * 0.2, y + r * 0.34, x - r * 0.36, y + r * 0.58);
+  g.lineBetween(x - r * 0.2, y + r * 0.34, x - r * 0.04, y + r * 0.58);
+  g.lineBetween(x + r * 0.22, y + r * 0.16, x + r * 0.22, y + r * 0.42);
+  g.lineBetween(x + r * 0.22, y + r * 0.4, x + r * 0.08, y + r * 0.58);
+  g.lineBetween(x + r * 0.22, y + r * 0.4, x + r * 0.38, y + r * 0.58);
+}
+
+/** Colourful destination badge for a bus stop or passenger speech bubble (park / school / shop / circus). */
+export function drawPlaceIcon(g: G, place: StopPlace, x: number, y: number, r: number): void {
+  const bg: Record<StopPlace, number> = {
+    park: 0x5ea85b,
+    school: C.yellow,
+    shop: 0x3a86ff,
+    circus: C.red,
+  };
+  g.fillStyle(bg[place], 1);
+  g.lineStyle(Math.max(2, r * 0.14), C.ink, 1);
+  g.fillCircle(x, y, r);
+  g.strokeCircle(x, y, r);
+
+  switch (place) {
+    case 'park': {
+      // Tree trunk + lush crown + tiny flower
+      g.fillStyle(0x6b3e26, 1);
+      g.fillRect(x - r * 0.1, y + r * 0.06, r * 0.2, r * 0.44);
+      g.fillStyle(0x9be070, 1);
+      g.lineStyle(Math.max(1.5, r * 0.08), C.ink, 1);
+      g.fillCircle(x, y - r * 0.14, r * 0.42);
+      g.strokeCircle(x, y - r * 0.14, r * 0.42);
+      g.fillStyle(C.yellow, 1);
+      g.fillCircle(x + r * 0.22, y - r * 0.24, r * 0.1);
+      break;
+    }
+    case 'school': {
+      // Little schoolhouse / open book
+      g.fillStyle(C.cream, 1);
+      g.lineStyle(Math.max(1.5, r * 0.08), C.ink, 1);
+      g.fillRect(x - r * 0.44, y - r * 0.08, r * 0.88, r * 0.52);
+      g.strokeRect(x - r * 0.44, y - r * 0.08, r * 0.88, r * 0.52);
+      g.fillStyle(C.red, 1);
+      g.fillTriangle(x - r * 0.54, y - r * 0.06, x, y - r * 0.56, x + r * 0.54, y - r * 0.06);
+      g.strokeTriangle(x - r * 0.54, y - r * 0.06, x, y - r * 0.56, x + r * 0.54, y - r * 0.06);
+      g.fillStyle(C.ink, 1);
+      g.fillRect(x - r * 0.12, y + r * 0.14, r * 0.24, r * 0.3);
+      break;
+    }
+    case 'shop': {
+      // Shopping bag with handles
+      g.lineStyle(Math.max(2, r * 0.1), C.cream, 1);
+      g.beginPath();
+      g.arc(x, y - r * 0.24, r * 0.2, Math.PI, 0, false);
+      g.strokePath();
+      g.fillStyle(C.orange, 1);
+      g.lineStyle(Math.max(1.5, r * 0.08), C.ink, 1);
+      g.fillRoundedRect(x - r * 0.4, y - r * 0.22, r * 0.8, r * 0.66, r * 0.1);
+      g.strokeRoundedRect(x - r * 0.4, y - r * 0.22, r * 0.8, r * 0.66, r * 0.1);
+      g.fillStyle(C.yellow, 1);
+      g.fillCircle(x, y + r * 0.1, r * 0.14);
+      break;
+    }
+    case 'circus': {
+      // Striped circus tent
+      g.fillStyle(C.cream, 1);
+      g.lineStyle(Math.max(1.5, r * 0.08), C.ink, 1);
+      g.fillTriangle(x - r * 0.52, y + r * 0.36, x, y - r * 0.48, x + r * 0.52, y + r * 0.36);
+      g.strokeTriangle(x - r * 0.52, y + r * 0.36, x, y - r * 0.48, x + r * 0.52, y + r * 0.36);
+      g.fillStyle(C.yellow, 1);
+      g.fillTriangle(x - r * 0.18, y + r * 0.36, x, y - r * 0.48, x + r * 0.18, y + r * 0.36);
+      g.fillStyle(C.ink, 1);
+      g.fillRect(x - r * 0.1, y + r * 0.12, r * 0.2, r * 0.24);
+      g.fillStyle(C.yellow, 1);
+      g.fillCircle(x, y - r * 0.52, r * 0.09);
+      break;
+    }
+  }
 }

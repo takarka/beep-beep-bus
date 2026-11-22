@@ -52,26 +52,29 @@
 - Our own lane changes (overtaking by the player via button or Up/Down / W/S); flashing turn signals on all vehicles when changing lanes
 - Nitro boost; longer stretches between lights, stops, stations and bumps
 
+## ✅ Version 0.9 (done)
+
+- Damage and petrol carry over from one level to the next (saved per bus in the garage, shown on the map, results, menu and garage cards; fixed at gas stations)
+
 ## 🔜 Version 0.2: mobile and polish (remaining)
 
 - [ ] Phone testing: button sizes, safe areas (notch), fullscreen on the first tap
-- [ ] **Voice prompts** in three languages (recorded files: "Stop!", "Bus stop!", "Well done!")
+- [x] **Voice prompts** in three languages ("Stop!", "Bus stop!", "Well done!", etc. via Web Speech API with toggle)
 - [ ] Parent settings (behind a "hold for 3 seconds" gate): difficulty, reset progress
-- [ ] Animated passengers (walking, waving), a speech bubble with an icon of where they're going
+- [x] Animated passengers (walking, waving), a speech bubble with an icon of where they're going
 
 ## 🚀 Version 0.3: more gameplay
 
-- [ ] Pedestrians at crossings without a traffic light (you must stop and let them pass)
-- [ ] **STOP sign**, "children" sign, speed bumps
-- [ ] Damage and petrol that carry over from one level to the next (with the station as the place to fix both)
-- [ ] Parked cars, a bot bus that stops at the bus stops too
-- [ ] Oncoming drivers overtaking each other
-- [ ] More vehicle types (taxi, truck, ambulance that you must let pass)
-- [ ] Evening / sunrise, fog, wipers
-- [ ] More routes / cities after Astana (Almaty, Shymkent, the seaside, mountains)
-- [ ] Landmark story on each level: a short postcard or fact when it is completed
-- [ ] More levels on the map (extend `core/campaign.ts`)
-- [ ] Passengers with a destination: "take me to the park", where the child picks the right stop
+- [x] Pedestrians at crossings without a traffic light (you must stop and let them pass)
+- [x] **STOP sign**, "children" sign, speed bumps
+- [x] Parked cars, a bot bus that stops at the bus stops too
+- [x] Oncoming drivers overtaking each other
+- [x] More vehicle types (taxi, truck, ambulance that you must let pass)
+- [x] Evening / sunrise, fog, wipers
+- [x] More routes / cities after Astana (Almaty, Shymkent)
+- [x] Landmark story on each level: a short postcard or fact when it is completed
+- [x] More levels on the map (extend `core/campaign.ts`)
+- [x] Passengers with a destination: "take me to the park", where the child picks the right stop
 
 ## 🎨 Version 0.4: garage and rewards
 

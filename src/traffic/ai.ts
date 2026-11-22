@@ -5,7 +5,7 @@ import type { LightState } from '../core/traffic';
  * They drive in the oncoming lane, i.e. towards decreasing x, and follow the rules:
  * stop for red (and for yellow when they still can), keep a distance to the vehicle ahead.
  */
-export type VehicleKind = 'car' | 'police' | 'minibus';
+export type VehicleKind = 'car' | 'police' | 'taxi' | 'truck' | 'minibus' | 'ambulance';
 
 export interface VehicleSpec {
   /** Body length in local (unscaled) px. */
@@ -17,7 +17,10 @@ export interface VehicleSpec {
 export const SPECS: Record<VehicleKind, VehicleSpec> = {
   car: { length: 150, cruise: [150, 215] },
   police: { length: 160, cruise: [170, 215] },
+  taxi: { length: 150, cruise: [165, 225] },
+  truck: { length: 245, cruise: [105, 145] },
   minibus: { length: 230, cruise: [120, 170] },
+  ambulance: { length: 190, cruise: [215, 260] },
 };
 
 export const AI = {
@@ -91,23 +94,32 @@ export interface DriveInput {
   headway?: number;
   minGap?: number;
   brake?: number;
+  /** Real braking power used when planning stops for traffic lights (defaults to `brake`). */
+  lightBrake?: number;
 }
 
 /** The speed the driver wants right now. */
 export function targetSpeed(p: DriveInput): number {
   const brake = p.brake ?? AI.brake;
+  const lightBrake = p.lightBrake ?? brake;
   let target = p.cruise;
   if (p.leaderRear !== null) {
     const gap = p.front - p.leaderRear - (p.minGap ?? AI.minGap) - (p.headway ?? 0) * p.v;
     target = Math.min(target, safeSpeed(gap, brake));
   }
+  const lightLookahead = Math.max(AI.lookahead, brakingDistance(p.v, lightBrake) + 120);
   for (const l of p.lights) {
     const dist = p.front - l.stopX; // > 0 while the line is still ahead
-    if (dist < -4 || dist > AI.lookahead || l.state === 'green') continue;
-    // Physically unable to stop before the line any more: keep going rather than slam the brakes mid-junction.
-    // (A vehicle that is braking normally stays about `stopMargin` px outside this zone.)
-    if (p.v > 40 && dist < brakingDistance(p.v, brake) - 4) continue;
-    target = Math.min(target, safeSpeed(dist - AI.stopMargin, brake));
+    if (l.state === 'green' || dist > lightLookahead) continue;
+    // A slow or stopped vehicle that crept slightly over a red stop line stays stopped rather than running the red.
+    if (dist < -4) {
+      if (l.state === 'red' && dist >= -25 && p.v < 60) target = 0;
+      continue;
+    }
+    // On yellow, if physically unable to stop before the line any more, keep going rather than slam the brakes mid-junction.
+    // On red, never abort braking before the stop line.
+    if (l.state === 'yellow' && p.v > 40 && dist < brakingDistance(p.v, lightBrake) - 4) continue;
+    target = Math.min(target, safeSpeed(dist - AI.stopMargin, lightBrake * 0.9));
   }
   for (const z of p.zones ?? []) {
     const dist = p.front - z.start; // > 0: the zone is still ahead
@@ -122,10 +134,14 @@ export function nextSpeed(v: number, target: number, dt: number, brake: number =
   return v < target ? Math.min(target, v + AI.accel * dt) : Math.max(target, v - brake * dt);
 }
 
-/** Types and how often they appear. A single police car at most, and rarely. */
-export function pickKind(rng: () => number, policeOnRoad: boolean): VehicleKind {
-  if (!policeOnRoad && rng() < 0.12) return 'police';
-  return rng() < 0.72 ? 'car' : 'minibus';
+/** Types and how often they appear. At most one emergency vehicle at a time, and rarely. */
+export function pickKind(rng: () => number, emergencyOnRoad: boolean): VehicleKind {
+  if (!emergencyOnRoad && rng() < 0.14) return rng() < 0.55 ? 'police' : 'ambulance';
+  const r = rng();
+  if (r < 0.46) return 'car';
+  if (r < 0.68) return 'taxi';
+  if (r < 0.86) return 'minibus';
+  return 'truck';
 }
 
 /** Seconds until the next vehicle appears: busier roads on later levels. */

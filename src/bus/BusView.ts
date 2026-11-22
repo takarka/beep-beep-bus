@@ -111,6 +111,9 @@ export class BusView extends Phaser.GameObjects.Container {
   private tiltA = 0;
   private blinkerG: G | null = null;
   private blinkerKey = -1;
+  private wiperG: G | null = null;
+  private wiperTween: Phaser.Tweens.Tween | null = null;
+  private wipersOn = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number, design: BusDesign) {
     super(scene, x, y);
@@ -124,8 +127,12 @@ export class BusView extends Phaser.GameObjects.Container {
     this.wheels = [];
     this.leaves = [];
     this.blinkerKey = -1;
+    this.wiperTween?.stop();
+    this.wiperTween = null;
+    this.wiperG = null;
     this.build();
     this.setPassengers(this.passengers);
+    if (this.wipersOn) this.applyWipers(true);
   }
 
   /** How battered the bus looks: 0 = new … 1 = wrecked (scratches, dents, soot, cracked glass, a broken headlight). */
@@ -267,6 +274,41 @@ export class BusView extends Phaser.GameObjects.Container {
     if (on === this.beamOn) return;
     this.beamOn = on;
     this.setDesign(this.design);
+  }
+
+  /** Rain/snow: animated windshield wiper sweeping back and forth. */
+  setWipers(on: boolean): void {
+    if (on === this.wipersOn) return;
+    this.wipersOn = on;
+    this.applyWipers(on);
+  }
+
+  private applyWipers(on: boolean): void {
+    this.wiperTween?.stop();
+    this.wiperTween = null;
+    if (!on) {
+      this.wiperG?.setVisible(false);
+      return;
+    }
+    if (!this.wiperG) {
+      const ws = this.layout.windshield;
+      const g = this.scene.add.graphics({ x: ws.x + ws.w * 0.5, y: ws.y + ws.h - 4 });
+      g.lineStyle(4, C.ink, 1);
+      g.lineBetween(0, 0, 2, -ws.h * 0.72);
+      g.fillStyle(C.ink, 1);
+      g.fillCircle(0, 0, 4);
+      this.add(g);
+      this.wiperG = g;
+    }
+    this.wiperG.setVisible(true).setAngle(-12);
+    this.wiperTween = this.scene.tweens.add({
+      targets: this.wiperG,
+      angle: 32,
+      yoyo: true,
+      repeat: -1,
+      duration: 520,
+      ease: 'Sine.easeInOut',
+    });
   }
 
   /** World x positions of the door centres (for passengers to walk to). */

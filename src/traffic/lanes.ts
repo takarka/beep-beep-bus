@@ -33,9 +33,17 @@ export function createLaneMotion(lane: LaneIndex = 0): LaneMotion {
   return { lane, fromLane: lane, changeT: 0, y: laneY(lane) };
 }
 
+/** Maximum lateral distance (px) from a lane's wheel height to physically collide with traffic in that lane. */
+export const COLLISION_LANE_MARGIN = 18;
+
 /** True when a vehicle occupies `lane` (while changing lanes it blocks both). */
 export function occupiesLane(m: Pick<LaneMotion, 'lane' | 'fromLane' | 'changeT'>, lane: LaneIndex): boolean {
   return m.lane === lane || (m.changeT > 0 && m.fromLane === lane);
+}
+
+/** True when a vehicle at wheel height `y` physically overlaps `lane` for collision purposes. */
+export function collidesInLane(y: number, lane: LaneIndex): boolean {
+  return Math.abs(y - laneY(lane)) < COLLISION_LANE_MARGIN;
 }
 
 /** Starts a lane change to `to`; returns false if already targeting `to`. */

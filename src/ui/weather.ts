@@ -10,6 +10,23 @@ export function addWeatherFx(scene: Phaser.Scene, env: Env, opts: { depth?: numb
   const depth = opts.depth ?? 80;
   const night = env.time === 'night';
 
+  if (env.fog) {
+    const fogColor = night ? 0x3b445c : 0xe4ecf2;
+    scene.add
+      .rectangle(0, 0, GAME_W, GAME_H, fogColor, night ? 0.24 : 0.3)
+      .setOrigin(0)
+      .setScrollFactor(0)
+      .setDepth(depth - 0.6);
+    // drifting soft mist bands near the horizon and road
+    for (let i = 0; i < 3; i++) {
+      const band = scene.add
+        .ellipse(GAME_W * (0.2 + i * 0.35), 340 + i * 95, 720, 120, fogColor, 0.22)
+        .setScrollFactor(0)
+        .setDepth(depth - 0.55);
+      scene.tweens.add({ targets: band, x: band.x + (i % 2 === 0 ? 70 : -70), yoyo: true, repeat: -1, duration: 4200 + i * 700, ease: 'Sine.easeInOut' });
+    }
+  }
+
   if (env.precip && precipKind(env) === 'rain') {
     scene.add
       .rectangle(0, 0, GAME_W, GAME_H, night ? 0x0b1030 : 0x35405a, night ? 0.14 : 0.16)

@@ -1,8 +1,12 @@
+import type { StopPlace } from './level';
+
 /** Scoring and traffic rules — pure functions so they are easy to test and tune. */
 
 export const POINTS = {
   stopServed: 10,
   passenger: 2,
+  /** Bonus for dropping off a passenger at their requested destination stop. */
+  destination: 4,
   waitedAtRed: 5,
   ranRedLight: -10,
   missedStop: -5,
@@ -16,6 +20,22 @@ export const POINTS = {
   refuel: 4,
   /** The tank ran dry and somebody had to bring petrol. */
   noFuel: -10,
+  /** Stopped to let pedestrians cross at an uncontrolled zebra crossing. */
+  yielded: 5,
+  /** Drove across an uncontrolled zebra while pedestrians were crossing. */
+  ranCrosswalk: -10,
+  /** Made a full stop at a STOP sign. */
+  stopSign: 5,
+  /** Drove past a STOP sign without stopping. */
+  ranStopSign: -10,
+  /** Drove carefully past a "Children" sign. */
+  carefulChildren: 3,
+  /** Drove too fast past a "Children" sign. */
+  fastChildren: -5,
+  /** Moved out of the way to let an ambulance pass. */
+  yieldAmbulance: 5,
+  /** Blocked an ambulance with its siren on. */
+  blockAmbulance: -5,
 } as const;
 
 /** This many mistakes in a row (with nothing good in between) bring the police siren. */
@@ -95,6 +115,20 @@ export class ScoreKeeper {
   }
 }
 
+/** Splits onboard passengers into those who want to get off at `place` and those staying aboard. */
+export function countMatchingDestinations(
+  aboard: readonly StopPlace[],
+  place: StopPlace,
+): { exiting: number; remaining: StopPlace[] } {
+  let exiting = 0;
+  const remaining: StopPlace[] = [];
+  for (const d of aboard) {
+    if (d === place) exiting++;
+    else remaining.push(d);
+  }
+  return { exiting, remaining };
+}
+
 /** Kid-friendly rating: always at least one star. */
 export function starsFor(mistakes: number): 1 | 2 | 3 {
   if (mistakes === 0) return 3;
@@ -104,6 +138,16 @@ export function starsFor(mistakes: number): 1 | 2 | 3 {
 
 /** Speed bumps ("sleeping policemen"): how fast is too fast, world px/s. */
 export const BUMP = { gentle: 130, hard: 230 } as const;
+
+/** "Children" warning zone: slow down past the sign. */
+export const CHILDREN = { gentle: 165, fast: 235 } as const;
+
+export function childrenZoneResult(v: number): 'gentle' | 'ok' | 'fast' {
+  const speed = Math.max(0, v);
+  if (speed <= CHILDREN.gentle) return 'gentle';
+  if (speed <= CHILDREN.fast) return 'ok';
+  return 'fast';
+}
 
 export type BumpKind = 'gentle' | 'bump' | 'hard';
 

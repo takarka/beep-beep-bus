@@ -36,10 +36,11 @@ function cloud(scene: Phaser.Scene): void {
 
 type Gen = (scene: Phaser.Scene, env: Env, p: Palette, key: string) => void;
 
-const hills: Gen = (scene, _env, p, key) => {
+const hills: Gen = (scene, env, p, key) => {
   const W = 2048;
   const Hh = 240;
   const g = make(scene);
+  const night = env.time === 'night';
   const layer = (color: number, base: number, amps: Array<[number, number, number]>) => {
     g.fillStyle(color, 1);
     const pts: Phaser.Math.Vector2[] = [new Phaser.Math.Vector2(0, Hh)];
@@ -51,6 +52,28 @@ const hills: Gen = (scene, _env, p, key) => {
     pts.push(new Phaser.Math.Vector2(W, Hh));
     g.fillPoints(pts, true);
   };
+  if (env.city === 'almaty') {
+    const peakCol = night ? 0x3b486e : 0x9eb4cc;
+    const snowCol = night ? 0x9aa6c4 : 0xf4f8fb;
+    const peakXs = [0, 170, 340, 520, 710, 880, 1080, 1260, 1460, 1650, 1840, 2048];
+    const peakHs = [110, 28, 120, 18, 105, 36, 118, 22, 100, 32, 112, 110];
+    const mPts: Phaser.Math.Vector2[] = [new Phaser.Math.Vector2(0, Hh)];
+    for (let i = 0; i < peakXs.length; i++) mPts.push(new Phaser.Math.Vector2(peakXs[i]!, peakHs[i]!));
+    mPts.push(new Phaser.Math.Vector2(W, Hh));
+    g.fillStyle(peakCol, 1);
+    g.fillPoints(mPts, true);
+    g.fillStyle(snowCol, 1);
+    for (let i = 1; i < peakXs.length - 1; i += 2) {
+      const px = peakXs[i]!;
+      const py = peakHs[i]!;
+      const lx = peakXs[i - 1]!;
+      const ly = peakHs[i - 1]!;
+      const rx = peakXs[i + 1]!;
+      const ry = peakHs[i + 1]!;
+      const k = 0.42;
+      g.fillTriangle(px, py, px + (lx - px) * k, py + (ly - py) * k, px + (rx - px) * k, py + (ry - py) * k);
+    }
+  }
   layer(p.hillFar, 90, [[2, 35, 0.3], [5, 14, 1.2], [9, 6, 2]]);
   layer(p.hillNear, 150, [[3, 28, 2.1], [7, 10, 0.4]]);
   g.generateTexture(key, W, Hh);
@@ -190,10 +213,13 @@ const street: Gen = (scene, env, p, key) => {
   // far sidewalk
   g.fillStyle(p.grass, 1);
   g.fillRect(0, 0, W, 8);
-  if (env.season === 'spring') {
-    for (const [fx, c] of [[30, 0xf7b6d2], [110, 0xffd23f], [190, 0xffffff], [280, 0xf7b6d2], [360, 0xffd23f], [450, 0xffffff]] as const) {
+  if (env.season === 'spring' || (env.city === 'shymkent' && env.season !== 'winter')) {
+    const spots: ReadonlyArray<readonly [number, number]> = env.city === 'shymkent'
+      ? [[22, C.red], [58, C.yellow], [105, C.red], [154, C.orange], [202, C.red], [260, C.yellow], [312, C.red], [365, C.orange], [420, C.red], [472, C.yellow]]
+      : [[30, 0xf7b6d2], [110, 0xffd23f], [190, 0xffffff], [280, 0xf7b6d2], [360, 0xffd23f], [450, 0xffffff]];
+    for (const [fx, c] of spots) {
       g.fillStyle(night ? mix(c, 0x1b2048, 0.4) : c, 1);
-      g.fillCircle(fx, 3, 2.6);
+      g.fillCircle(fx, 3.5, env.city === 'shymkent' ? 3.4 : 2.6);
     }
   }
   g.fillStyle(p.sidewalk, 1);
@@ -214,6 +240,15 @@ const street: Gen = (scene, env, p, key) => {
   g.fillStyle(night ? 0xc9a93a : 0xf2c230, 1);
   g.fillRect(0, 111, W, 3);
   g.fillRect(0, 117, W, 3);
+  // Bus lane "А" marking on the curb lane (visual only; all traffic still uses this lane)
+  g.lineStyle(4.5, p.roadLine, night ? 0.65 : 0.85);
+  const ax = 256;
+  g.beginPath();
+  g.moveTo(ax - 15, 176);
+  g.lineTo(ax + 2, 154);
+  g.lineTo(ax + 15, 176);
+  g.strokePath();
+  g.lineBetween(ax - 9, 168, ax + 10, 168);
   if (env.precip && env.season !== 'winter') {
     // wet road: soft puddle shines
     g.fillStyle(0xffffff, night ? 0.1 : 0.14);

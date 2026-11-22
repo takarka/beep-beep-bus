@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { mulberry32 } from '../src/core/rng';
 import {
   AI,
+  DRIVERS,
   SPECS,
   brakingDistance,
   nextSpeed,
@@ -88,13 +89,56 @@ describe('oncoming traffic', () => {
     expect(nextSpeed(100, 0, 10)).toBe(0);
   });
 
-  it('police is rare, never doubled; all three kinds appear', () => {
+  it('emergency vehicles are rare, never doubled; all six kinds appear', () => {
     const rng = mulberry32(5);
-    const kinds = Array.from({ length: 400 }, () => pickKind(rng, false));
-    expect(new Set(kinds)).toEqual(new Set(['car', 'police', 'minibus']));
-    expect(kinds.filter((k) => k === 'police').length).toBeLessThan(80);
+    const kinds = Array.from({ length: 500 }, () => pickKind(rng, false));
+    expect(new Set(kinds)).toEqual(new Set(['car', 'police', 'taxi', 'truck', 'minibus', 'ambulance']));
+    expect(kinds.filter((k) => k === 'police' || k === 'ambulance').length).toBeLessThan(100);
     const r2 = mulberry32(5);
-    expect(Array.from({ length: 200 }, () => pickKind(r2, true)).includes('police')).toBe(false);
+    const normal = Array.from({ length: 200 }, () => pickKind(r2, true));
+    expect(normal.includes('police')).toBe(false);
+    expect(normal.includes('ambulance')).toBe(false);
+  });
+
+  it('stops before a red line even at high speed, coarse dt, or with a hasty driver', () => {
+    const stopX = 1000;
+    for (const [v0, dt] of [
+      [300, 0.05],
+      [380, 0.05],
+      [550, 0.05],
+    ] as const) {
+      let front = 2000;
+      let v: number = v0;
+      for (let t = 0; t < 15; t += dt) {
+        v = nextSpeed(v, targetSpeed({ cruise: v0, v, front, leaderRear: null, lights: [{ stopX, state: 'red' }] }), dt);
+        front -= v * dt;
+      }
+      expect(v).toBeLessThan(1);
+      expect(front).toBeGreaterThanOrEqual(stopX);
+    }
+
+    // Hasty driver stops for red when lightBrake is its real brake
+    const d = DRIVERS.hasty;
+    let front = 1800;
+    let v = 250;
+    for (let t = 0; t < 15; t += 0.05) {
+      const target = targetSpeed({
+        cruise: 250,
+        v,
+        front,
+        leaderRear: null,
+        lights: [{ stopX, state: 'red' }],
+        brake: d.planBrake,
+        lightBrake: d.brake,
+      });
+      v = nextSpeed(v, target, 0.05, d.brake);
+      front -= v * 0.05;
+    }
+    expect(v).toBeLessThan(1);
+    expect(front).toBeGreaterThanOrEqual(stopX);
+
+    // A slow vehicle slightly past a red line stays stopped instead of accelerating through
+    expect(targetSpeed({ cruise: 200, v: 15, front: stopX - 10, leaderRear: null, lights: [{ stopX, state: 'red' }] })).toBe(0);
   });
 
   it('roads get busier on later levels, but never swamped', () => {

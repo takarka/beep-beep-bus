@@ -1,5 +1,11 @@
+import { BRIDGE_ARCH, BRIDGE_MAX_LEN, BRIDGE_MIN_LEN, hasBridgeFor, type BridgeData } from './bridge';
 import { mulberry32, pick, randInt } from './rng';
 import type { LightState } from './traffic';
+
+export { hasBridgeFor, type BridgeData } from './bridge';
+
+export const STOP_PLACES = ['park', 'school', 'shop', 'circus'] as const;
+export type StopPlace = (typeof STOP_PLACES)[number];
 
 export interface StopData {
   kind: 'stop';
@@ -8,6 +14,10 @@ export interface StopData {
   waiting: number;
   /** How many riders want to get off here (capped by who is aboard at runtime). */
   exiting: number;
+  /** Theme of this stop (park, school, shop, circus). */
+  place: StopPlace;
+  /** Destination stop theme for each waiting passenger (`destinations.length === waiting`). */
+  destinations: StopPlace[];
 }
 
 export interface LightData {
@@ -29,6 +39,16 @@ export interface LevelData {
   stations: number[];
   /** World x of the speed bumps (from level 2). */
   bumps: number[];
+  /** World x of the stop lines of uncontrolled pedestrian crossings (from level 2). */
+  crosswalks: number[];
+  /** World x of the stop lines with a STOP sign (from level 3). */
+  stopSigns: number[];
+  /** World x of parked cars on the main lane (from level 3). */
+  parked: number[];
+  /** World x of "Children" warning zones (from level 4). */
+  children: number[];
+  /** Long gently-arched bridges over a lake (on some levels). */
+  bridges: BridgeData[];
   finishX: number;
   length: number;
   maxSpeed: number;
@@ -40,7 +60,7 @@ const FIRST_ITEM_X = 3200;
 export const MIN_GAP = 3300;
 export const MAX_GAP = 4100;
 
-/** More stops and lights as the route goes on: 3 on levels 1–2 up to 8 on levels 11–12. */
+/** More stops and lights as the route goes on: 3 on levels 1–2 up to 8 on levels 11+. */
 export function levelCounts(level: number): { stops: number; lights: number } {
   const n = Math.min(3 + Math.floor((Math.max(1, level) - 1) / 2), 8);
   return { stops: n, lights: n };
@@ -49,11 +69,23 @@ export function levelCounts(level: number): { stops: number; lights: number } {
 /** How many speed bumps a level has: none on level 1, then one more every three levels. */
 export const bumpCountFor = (level: number): number => (level < 2 ? 0 : Math.min(1 + Math.floor((Math.max(level, 1) - 1) / 3), 4));
 
+/** Uncontrolled pedestrian crossings: none on level 1, then 1..3 on higher levels. */
+export const crosswalkCountFor = (level: number): number => (level < 2 ? 0 : level < 6 ? 1 : level < 11 ? 2 : 3);
+
+/** STOP signs: none on levels 1–2, then 1..2 on higher levels. */
+export const stopSignCountFor = (level: number): number => (level < 3 ? 0 : level < 8 ? 1 : 2);
+
+/** Parked cars blocking the right lane: none on levels 1–2, then 1..2 on higher levels. */
+export const parkedCountFor = (level: number): number => (level < 3 ? 0 : level < 11 ? 1 : 2);
+
+/** "Children" speed-limit signs: none on levels 1–3, then 1 per route. */
+export const childrenCountFor = (level: number): number => (level < 4 ? 0 : 1);
+
 /** Gas stations: none on level 1 (no petrol system yet), one on levels 2–5, two on 6–9, three after that. */
 export const stationCountFor = (level: number): number => (level < 2 ? 0 : level <= 5 ? 1 : level <= 9 ? 2 : 3);
 
-/** Bus speed limit for a level (world px/s): gentle at first, a bit faster later. */
-export const maxSpeedFor = (level: number): number => Math.min(340 + (Math.max(1, level) - 1) * 15, 510);
+/** Bus speed limit for a level (world px/s): gentle at first, rising smoothly across all 24 routes. */
+export const maxSpeedFor = (level: number): number => Math.min(340 + (Math.max(1, level) - 1) * 8, 510);
 
 /** The most people that may wait at one stop. */
 export const maxWaitingFor = (level: number): number => Math.min(3 + Math.floor(Math.max(1, level) / 3), 6);
@@ -72,7 +104,31 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
   const items: LevelItem[] = [];
   let x = FIRST_ITEM_X;
   let firstLight = true;
-  for (const kind of kinds) {
+  // Assign each stop a theme so adjacent stops differ; later stops serve as destinations for earlier riders.
+  const placePool: StopPlace[] = [...STOP_PLACES];
+  for (let i = placePool.length - 1; i > 0; i--) {
+    const j = randInt(rng, 0, i);
+    [placePool[i], placePool[j]] = [placePool[j]!, placePool[i]!];
+  }
+  const stopPlaces = Array.from({ length: stops }, (_, i) => placePool[i % placePool.length]!);
+  const dropOnlyIdx = level >= 2 && stops >= 4 ? randInt(rng, 1, stops - 2) : -1;
+  let stopSeq = 0;
+
+  const wantBridge = hasBridgeFor(level);
+  const neededGaps =
+    stationCountFor(level) +
+    bumpCountFor(level) +
+    crosswalkCountFor(level) +
+    stopSignCountFor(level) +
+    parkedCountFor(level) +
+    childrenCountFor(level);
+  // Reserve a dedicated inter-item gap when one is free; otherwise place the bridge on the final approach.
+  const bridgeGapIdx = wantBridge && kinds.length - 1 > neededGaps ? Math.floor((kinds.length - 1) / 2) : -1;
+  const bridgeLen = wantBridge ? randInt(rng, BRIDGE_MIN_LEN, BRIDGE_MAX_LEN) : 0;
+  const bridges: BridgeData[] = [];
+
+  for (let idxItem = 0; idxItem < kinds.length; idxItem++) {
+    const kind = kinds[idxItem]!;
     if (kind === 'light') {
       items.push({
         kind,
@@ -83,13 +139,27 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
       });
       firstLight = false;
     } else {
-      items.push({ kind, zoneEnd: x, waiting: randInt(rng, 1, maxWaitingFor(level)), exiting: randInt(rng, 0, 3) });
+      const idx = stopSeq++;
+      const place = stopPlaces[idx]!;
+      const laterPlaces = stopPlaces.slice(idx + 1);
+      const isLast = idx === stops - 1;
+      const waiting = isLast || idx === dropOnlyIdx ? 0 : randInt(rng, 1, maxWaitingFor(level));
+      const destinations = Array.from({ length: waiting }, () =>
+        laterPlaces.length > 0 ? pick(rng, laterPlaces) : place,
+      );
+      items.push({ kind, zoneEnd: x, waiting, exiting: randInt(rng, 0, 3), place, destinations });
     }
-    x += randInt(rng, MIN_GAP, MAX_GAP);
+    if (idxItem === bridgeGapIdx) {
+      const margin = 850;
+      bridges.push({ x0: x + margin, x1: x + margin + bridgeLen, arch: BRIDGE_ARCH });
+      x += bridgeLen + margin * 2;
+    } else {
+      x += randInt(rng, MIN_GAP, MAX_GAP);
+    }
   }
 
   const spots = items.map((i) => (i.kind === 'stop' ? i.zoneEnd : i.lineX));
-  const gaps = spots.slice(1).map((_, i) => i);
+  const gaps = spots.slice(1).map((_, i) => i).filter((g) => g !== bridgeGapIdx);
 
   // Gas stations go into gaps spread evenly along the route, in the middle of the gap.
   const stations: number[] = [];
@@ -111,12 +181,56 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
   }
   bumps.sort((a, b) => a - b);
 
-  const finishX = x;
+  // Uncontrolled pedestrian crossings go into remaining gaps.
+  const crosswalks: number[] = [];
+  for (let n = crosswalkCountFor(level); n > 0 && gaps.length > 0; n--) {
+    const g = gaps.splice(randInt(rng, 0, gaps.length - 1), 1)[0]!;
+    crosswalks.push(Math.round((spots[g]! + spots[g + 1]!) / 2 + randInt(rng, -250, 250)));
+  }
+  crosswalks.sort((a, b) => a - b);
+
+  // STOP signs go into remaining gaps.
+  const stopSigns: number[] = [];
+  for (let n = stopSignCountFor(level); n > 0 && gaps.length > 0; n--) {
+    const g = gaps.splice(randInt(rng, 0, gaps.length - 1), 1)[0]!;
+    stopSigns.push(Math.round((spots[g]! + spots[g + 1]!) / 2 + randInt(rng, -250, 250)));
+  }
+  stopSigns.sort((a, b) => a - b);
+
+  // Parked cars go into remaining gaps.
+  const parked: number[] = [];
+  for (let n = parkedCountFor(level); n > 0 && gaps.length > 0; n--) {
+    const g = gaps.splice(randInt(rng, 0, gaps.length - 1), 1)[0]!;
+    parked.push(Math.round((spots[g]! + spots[g + 1]!) / 2 + randInt(rng, -250, 250)));
+  }
+  parked.sort((a, b) => a - b);
+
+  // "Children" signs go into remaining gaps.
+  const children: number[] = [];
+  for (let n = childrenCountFor(level); n > 0 && gaps.length > 0; n--) {
+    const g = gaps.splice(randInt(rng, 0, gaps.length - 1), 1)[0]!;
+    children.push(Math.round((spots[g]! + spots[g + 1]!) / 2 + randInt(rng, -250, 250)));
+  }
+  children.sort((a, b) => a - b);
+
+  let finishX = x;
+  if (wantBridge && bridges.length === 0) {
+    const lastSpot = spots[spots.length - 1] ?? FIRST_ITEM_X;
+    const x0 = lastSpot + 850;
+    const x1 = x0 + bridgeLen;
+    bridges.push({ x0, x1, arch: BRIDGE_ARCH });
+    finishX = Math.max(finishX, x1 + 1100);
+  }
   return {
     level,
     items,
     stations,
     bumps,
+    crosswalks,
+    stopSigns,
+    parked,
+    children,
+    bridges,
     finishX,
     length: finishX + 1400,
     maxSpeed: maxSpeedFor(level),

@@ -287,5 +287,237 @@ export function drawLandmarkBig(g: G, id: LandmarkId, night = false): void {
       poly(C.blue, [V(-152, -194), V(-144, -194), V(-160, -214), V(-166, -214)]);
       break;
     }
+    case 'koktobe': {
+      // Kok-Tobe: green hill, stepped TV tower with observation pods and a cable car
+      poly(0x5ea85b, [V(-230, 0), V(-90, -148), V(60, -80), V(215, 0)]);
+      poly(0x4b8e49, [V(-230, 0), V(-140, -90), V(-20, 0)]);
+      // Cable car line & lit cabin
+      line(4, -210, -215, -70, -110, ink);
+      rect(C.red, -162, -172, 46, 32, 7);
+      win(-154, -165, 30, 14, 3);
+      // TV tower
+      poly(SILVER, [V(32, -32), V(44, -270), V(76, -270), V(88, -32)]);
+      rect(STONE, 16, -36, 88, 36, 4);
+      win(42, -26, 36, 26, 3);
+      // Observation decks
+      rect(C.red, 26, -218, 68, 22, 6);
+      win(36, -213, 48, 12, 3);
+      rect(STONE, 30, -158, 60, 18, 5);
+      win(38, -154, 44, 10, 2);
+      // Antenna spire & warning light
+      line(5, 60, -270, 60, -334, ink);
+      disc(C.red, 60, -334, 7);
+      break;
+    }
+    case 'medeu': {
+      // Medeu: mountain peaks, protective dam, floodlights and gleaming high-altitude ice rink
+      poly(0x8aa0b8, [V(-230, 0), V(-115, -265), V(15, 0)]);
+      poly(0x9eb4cc, [V(-25, 0), V(110, -235), V(230, 0)]);
+      poly(0xf4f8fb, [V(-115, -265), V(-160, -172), V(-70, -172)]);
+      poly(0xf4f8fb, [V(110, -235), V(68, -152), V(152, -152)]);
+      // Stadium & dam terrace
+      rect(STONE, -205, -72, 410, 72, 10);
+      for (let i = -3; i <= 3; i++) win(i * 48 - 14, -62, 28, 16, 3);
+      // Floodlights
+      for (const sx of [-185, -95, 95, 185]) {
+        line(6, sx, -72, sx, -155, ink);
+        rect(night ? 0xfff3b0 : 0xdfe3e8, sx - 18, -172, 36, 18, 4);
+      }
+      // Ice rink
+      g.fillStyle(tone(SKY), 1);
+      g.fillEllipse(0, -18, 340, 34);
+      g.strokeEllipse(0, -18, 340, 34);
+      g.lineStyle(3, 0xffffff, 0.8);
+      g.strokeEllipse(0, -18, 250, 20);
+      g.lineStyle(5, ink, 1);
+      break;
+    }
+    case 'shymbulak': {
+      // Shymbulak: snowy peaks, gondola cableway and cosy alpine lodge
+      poly(0xe3edf5, [V(-230, 0), V(-100, -280), V(35, 0)]);
+      poly(0xf4f8fb, [V(-30, 0), V(110, -305), V(230, 0)]);
+      poly(0xc7daea, [V(-100, -280), V(-138, -175), V(-72, -175)]);
+      // Cableway pylons & wires
+      line(6, -155, 0, -155, -205, ink);
+      line(6, 155, 0, 155, -120, ink);
+      line(4, -220, -225, 220, -100, ink);
+      for (const [cx, cy] of [[-75, -182], [75, -140]] as const) {
+        line(3, cx, cy, cx, cy + 16, ink);
+        rect(C.red, cx - 24, cy + 16, 48, 34, 8);
+        win(cx - 16, cy + 23, 32, 16, 3);
+      }
+      // Alpine lodge
+      rect(0x8a5a3b, -80, -76, 160, 76);
+      poly(C.red, [V(-96, -76), V(0, -124), V(96, -76)]);
+      win(-60, -56, 34, 28);
+      win(26, -56, 34, 28);
+      rect(0x3b3640, -16, -46, 32, 46, 4);
+      break;
+    }
+    case 'circus': {
+      // Almaty Circus: colonnade base, yurt-shaped ribbed roof and ornate crown
+      rect(STONE, -195, -96, 390, 96, 8);
+      for (let i = -3; i <= 3; i++) if (i !== 0) archWin(i * 48 - 14, -76, 28, 52);
+      rect(0x3b3640, -36, -56, 72, 56, 6);
+      // Striped yurta dome
+      dome(C.red, 0, -96, 195, 0.72);
+      for (const f of [-0.65, -0.35, 0, 0.35, 0.65]) line(4, f * 195, -96, f * 30, -230, 0xffffff, 0.65);
+      rect(GOLD, -198, -108, 396, 14, 4);
+      line(5, 0, -236, 0, -278, GOLD);
+      disc(GOLD, 0, -284, 14);
+      break;
+    }
+    case 'panfilov': {
+      // Panfilov Park & Ascension Cathedral: colourful wooden domes and park trees
+      for (const tx of [-185, 185]) {
+        rect(0x8a5a3b, tx - 10, -70, 20, 70);
+        disc(0x5ea85b, tx, -108, 48);
+      }
+      // Bell tower on the left
+      rect(GOLD, -145, -205, 52, 205);
+      poly(C.green, [V(-152, -205), V(-119, -275), V(-86, -205)]);
+      disc(GOLD, -119, -285, 10);
+      win(-131, -178, 24, 38);
+      // Main cathedral
+      rect(GOLD, -95, -145, 225, 145);
+      poly(C.green, [V(-110, -145), V(18, -235), V(146, -145)]);
+      for (const [dx, dy, r] of [[-48, -165, 24], [18, -242, 30], [84, -165, 24]] as const) {
+        disc(GOLD, dx, dy, r);
+        line(4, dx, dy - r, dx, dy - r - 22, GOLD);
+      }
+      for (const x of [-56, 18, 86]) archWin(x - 14, -112, 28, 52);
+      rect(0x3b3640, -10, -52, 46, 52, 6);
+      break;
+    }
+    case 'almaty_station': {
+      // Almaty Railway Station: symmetric facade, central clock portico and arched portal
+      rect(STONE, -215, -112, 430, 112);
+      rect(C.green, -226, -128, 452, 16, 4);
+      for (let i = -3; i <= 3; i++) if (Math.abs(i) > 1) archWin(i * 52 - 14, -88, 28, 48);
+      // Central portico
+      rect(0xfff8e7, -64, -172, 128, 172);
+      poly(C.green, [V(-74, -172), V(0, -215), V(74, -172)]);
+      archWin(-28, -138, 56, 70);
+      rect(0x3b3640, -28, -56, 56, 56, 6);
+      disc(0xffffff, 0, -184, 15);
+      line(3, 0, -184, 0, -193);
+      line(3, 0, -184, 8, -184);
+      break;
+    }
+    case 'dendropark': {
+      // Dendropark: classical colonnade entrance, pond with bridge and lush canopy
+      for (const [x, r, col] of [[-165, 62, 0x4b8e49], [165, 62, 0x4b8e49], [-92, 74, 0x5ea85b], [92, 74, 0x5ea85b]] as const) {
+        rect(0x8a5a3b, x - 11, -96, 22, 96);
+        disc(col, x, -135, r);
+      }
+      // Entrance colonnade
+      rect(STONE, -78, -120, 156, 26, 6);
+      for (const x of [-60, -22, 16, 54]) rect(0xffffff, x - 7, -94, 14, 94);
+      // Pond & footbridge
+      g.fillStyle(tone(SKY), 1);
+      g.fillEllipse(0, -14, 210, 32);
+      g.strokeEllipse(0, -14, 210, 32);
+      rect(0x8a5a3b, -56, -32, 112, 14, 5);
+      break;
+    }
+    case 'baidibek': {
+      // Baidibek Bi: terraced hill, tall pedestal and golden figure overlooking Shymkent
+      poly(0x9a8f80, [V(-210, 0), V(-60, -96), V(60, -96), V(210, 0)]);
+      poly(0x7fb069, [V(-210, 0), V(-130, -56), V(-70, 0)]);
+      poly(0x7fb069, [V(70, 0), V(130, -56), V(210, 0)]);
+      // Central staircase
+      rect(STONE, -26, -96, 52, 96);
+      for (let y = -16; y >= -80; y -= 16) line(3, -24, y, 24, y, ink, 0.5);
+      // Monument pedestal & figure
+      rect(STONE, -34, -182, 68, 86);
+      rect(GOLD, -16, -280, 32, 98);
+      line(10, -54, -262, 54, -262, GOLD);
+      disc(GOLD, 0, -298, 20);
+      break;
+    }
+    case 'citadel': {
+      // Shymkent Citadel: fortified sandstone walls, watchtowers and carved gates
+      rect(0xdcb877, -165, -136, 330, 136);
+      for (let x = -150; x <= 130; x += 44) rect(0xdcb877, x, -164, 24, 28);
+      // Flanking watchtowers
+      for (const tx of [-185, 145]) {
+        rect(0xc9a362, tx, -196, 46, 196, 6);
+        for (const bx of [tx + 2, tx + 26]) rect(0xc9a362, bx, -220, 18, 24);
+        win(tx + 15, -158, 16, 32, 6);
+        win(tx + 15, -96, 16, 32, 6);
+      }
+      // Pointed Timurid gate
+      g.fillStyle(tone(0x3a86ff), 1);
+      g.fillRoundedRect(-52, -108, 104, 108, { tl: 44, tr: 44, bl: 0, br: 0 });
+      g.strokeRoundedRect(-52, -108, 104, 108, { tl: 44, tr: 44, bl: 0, br: 0 });
+      rect(0x6b3e26, -34, -78, 68, 78, 6);
+      break;
+    }
+    case 'tulip': {
+      // Tulip Square: grand fountain pool, water arcs and glowing scarlet tulip sculpture
+      rect(STONE, -190, -26, 380, 26, 8);
+      g.fillStyle(tone(SKY), 1);
+      g.fillEllipse(0, -26, 340, 26);
+      g.strokeEllipse(0, -26, 340, 26);
+      // Water jets
+      g.lineStyle(4, 0xffffff, 0.8);
+      for (const sx of [-1, 1]) {
+        g.beginPath();
+        g.arc(sx * 72, -28, 50, sx < 0 ? -Math.PI * 0.85 : -Math.PI * 0.9, sx < 0 ? -Math.PI * 0.1 : -Math.PI * 0.15, false);
+        g.strokePath();
+      }
+      g.lineStyle(5, ink, 1);
+      // Giant tulip sculpture
+      rect(0x5ea85b, -12, -148, 24, 122);
+      poly(C.red, [V(-54, -196), V(0, -144), V(54, -196), V(38, -268), V(0, -238), V(-38, -268)]);
+      poly(C.yellow, [V(-26, -210), V(0, -278), V(26, -210), V(0, -158)]);
+      // Small tulips at base
+      for (const tx of [-145, -105, 105, 145]) {
+        line(4, tx, -26, tx, -52, 0x5ea85b);
+        disc(C.red, tx, -58, 10);
+      }
+      break;
+    }
+    case 'shymkent_zoo': {
+      // Shymkent Zoo: twin-tower arch gate, giraffe and pink flamingo
+      // Giraffe peeking on the left
+      rect(GOLD, -102, -162, 22, 162);
+      rect(GOLD, -106, -182, 42, 24, 10);
+      for (const y of [-140, -110, -80]) disc(0x8a5a3b, -91, y, 5);
+      // Pink flamingo on the right
+      line(4, 92, 0, 92, -52, C.orange);
+      disc(0xf15bb5, 92, -62, 22);
+      // Zoo archway
+      for (const x of [-185, 135]) {
+        rect(C.orange, x, -200, 50, 200, 6);
+        poly(C.green, [V(x - 6, -200), V(x + 25, -242), V(x + 56, -200)]);
+        win(x + 12, -162, 26, 36);
+      }
+      rect(C.yellow, -195, -214, 390, 44, 12);
+      for (const x of [-80, 0, 80]) disc(C.green, x, -192, 10);
+      break;
+    }
+    case 'shymkent_airport': {
+      // Shymkent Airport: sunlit wave-roof terminal, glass facade, tower and ascending plane
+      rect(STONE, -215, -100, 320, 100);
+      rect(C.orange, -228, -118, 346, 20, 10);
+      g.fillStyle(glass, 1);
+      g.fillRect(-198, -82, 286, 48);
+      g.strokeRect(-198, -82, 286, 48);
+      for (let i = 1; i < 8; i++) line(3, -198 + i * 35.75, -82, -198 + i * 35.75, -34, ink, 0.5);
+      rect(0x3b3640, -30, -34, 60, 34);
+      // Control tower
+      rect(STONE, 124, -208, 28, 208);
+      poly(glass, [V(104, -208), V(172, -208), V(184, -252), V(92, -252)]);
+      rect(C.orange, 86, -262, 104, 12, 4);
+      line(4, 138, -262, 138, -298);
+      // Plane climbing
+      g.fillStyle(tone(0xffffff), 1);
+      g.fillEllipse(-96, -192, 86, 18);
+      g.strokeEllipse(-96, -192, 86, 18);
+      poly(C.orange, [V(-102, -196), V(-78, -196), V(-110, -238), V(-124, -238)]);
+      poly(C.orange, [V(-102, -188), V(-78, -188), V(-110, -152), V(-124, -152)]);
+      break;
+    }
   }
 }

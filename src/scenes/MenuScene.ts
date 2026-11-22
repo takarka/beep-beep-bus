@@ -1,11 +1,13 @@
 import Phaser from 'phaser';
 import { audio } from '../audio/AudioEngine';
+import { voice } from '../audio/voice';
 import { BusView } from '../bus/BusView';
 import { DEFAULT_DESIGN } from '../bus/design';
-import { loadDesign } from '../bus/garage';
+import { loadBusStatus, loadDesign } from '../bus/garage';
 import { DRIVE_SCALE } from '../bus/geometry';
 import { C, GAME_W } from '../config';
 import { completedCount, loadProgress } from '../core/progress';
+import { MAX_HEALTH } from '../core/rules';
 import { LEVEL_COUNT } from '../core/campaign';
 import { getSettings, updateSettings } from '../core/settings';
 import { DICTS, LANGS, t } from '../i18n';
@@ -35,8 +37,20 @@ export function addAudioToggles(scene: Phaser.Scene, x: number, y: number): void
       musicBtn.setIcon((g, size) => Icons.music(g, size, getSettings().music));
     },
   });
+  const voiceBtn: Button = new Button(scene, x - 168, y, {
+    r: 34,
+    color: C.green,
+    icon: (g, size) => Icons.voice(g, size, getSettings().voice),
+    onClick: () => {
+      const next = !getSettings().voice;
+      updateSettings({ voice: next });
+      voiceBtn.setIcon((g, size) => Icons.voice(g, size, next));
+      if (next) voice.speak('go', { priority: true });
+    },
+  });
   soundBtn.setScrollFactor(0).setDepth(90);
   musicBtn.setScrollFactor(0).setDepth(90);
+  voiceBtn.setScrollFactor(0).setDepth(90);
 }
 
 const ASSIST_OFF = 0xb9b0a0;
@@ -51,12 +65,13 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create(): void {
-    audio.startMusic();
     this.scrollX = 0;
     const env = currentEnv();
+    audio.setMusicTheme('menu', { night: env.time === 'night' });
+    audio.setMusicIntensity(0.4);
     this.backdrop = createScenery(this, env, { behindUi: true });
 
-    const title = label(this, GAME_W / 2, 118, t('title'), { size: 92, color: C.yellow, strokeThickness: 14 });
+    const title = label(this, GAME_W / 2, 132, t('title'), { size: 84, color: C.yellow, strokeThickness: 14 });
     this.tweens.add({ targets: title, angle: { from: -2, to: 2 }, yoyo: true, repeat: -1, duration: 1400, ease: 'Sine.easeInOut' });
 
     const saved = loadDesign();
@@ -64,11 +79,13 @@ export class MenuScene extends Phaser.Scene {
     this.bus = new BusView(this, GAME_W / 2, GROUND_Y, design);
     this.bus.setScale(DRIVE_SCALE[design.body]);
     this.bus.setNight(env.time === 'night');
+    this.bus.setWipers(env.precip);
+    if (saved) this.bus.setDamage(1 - loadBusStatus().health / MAX_HEALTH);
     this.bus.setPassengers(3);
     // Tap the bus to honk: small kids love it.
     this.bus.setInteractive(new Phaser.Geom.Rectangle(-420, -400, 840, 400), Phaser.Geom.Rectangle.Contains);
     this.bus.on('pointerdown', () => {
-      audio.horn();
+      audio.horn(design.body);
       const s = this.bus.scaleX;
       this.tweens.add({ targets: this.bus, scaleY: s * 0.93, yoyo: true, duration: 120, onComplete: () => this.bus.setScale(s) });
     });
@@ -95,12 +112,12 @@ export class MenuScene extends Phaser.Scene {
 
     // Language badges
     LANGS.forEach((lang, i) => {
-      const b = new Button(this, 80 + i * 124, 52, {
-        w: 104,
-        h: 60,
+      const b = new Button(this, 64 + i * 100, 46, {
+        w: 88,
+        h: 52,
         color: getSettings().lang === lang ? C.yellow : C.cream,
         text: DICTS[lang].langBadge,
-        textSize: 26,
+        textSize: 22,
         onClick: () => {
           updateSettings({ lang });
           this.scene.restart();

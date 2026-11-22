@@ -9,7 +9,7 @@ import {
   sanitizeDesign,
 } from '../src/bus/design';
 import { computeLayout } from '../src/bus/geometry';
-import { MIN_GAP, generateLevel } from '../src/core/level';
+import { MIN_GAP, STOP_PLACES, generateLevel } from '../src/core/level';
 import { mulberry32 } from '../src/core/rng';
 import { LIGHT_TIMING, TrafficLightModel } from '../src/core/traffic';
 import {
@@ -19,6 +19,7 @@ import {
   ScoreKeeper,
   brakingDistance,
   canStopBefore,
+  countMatchingDestinations,
   crossedLine,
   hasMissedStop,
   isInStopZone,
@@ -110,6 +111,22 @@ describe('level generator', () => {
     for (let i = 1; i < xs.length; i++) expect(xs[i]! - xs[i - 1]!).toBeGreaterThanOrEqual(MIN_GAP);
     expect(lvl.finishX).toBeGreaterThan(xs[xs.length - 1]!);
     expect(lvl.items.filter((i) => i.kind === 'light' && i.teach)).toHaveLength(1);
+  });
+  it('assigns stop places and valid later destinations to waiting riders', () => {
+    const lvl = generateLevel(4);
+    const stops = lvl.items.filter((i) => i.kind === 'stop');
+    stops.forEach((s, idx) => {
+      expect(STOP_PLACES).toContain(s.place);
+      expect(s.destinations).toHaveLength(s.waiting);
+      const laterPlaces = stops.slice(idx + 1).map((n) => n.place);
+      for (const d of s.destinations) {
+        if (laterPlaces.length > 0) expect(laterPlaces).toContain(d);
+      }
+    });
+    expect(countMatchingDestinations(['park', 'circus', 'park'], 'park')).toEqual({
+      exiting: 2,
+      remaining: ['circus'],
+    });
   });
 });
 

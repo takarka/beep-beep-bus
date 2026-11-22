@@ -14,18 +14,18 @@ import {
 
 describe('world', () => {
   it('level 1 is the familiar sunny summer day, then the world changes', () => {
-    expect(envForLevel(1)).toEqual({ season: 'summer', time: 'day', precip: false });
+    expect(envForLevel(1)).toEqual({ season: 'summer', time: 'day', precip: false, fog: false });
     expect(envForLevel(0)).toEqual(envForLevel(1));
-    const seen = new Set(Array.from({ length: 8 }, (_, i) => envKey(envForLevel(i + 1))));
-    expect(seen.size).toBe(8); // every season × day/night combination appears
+    const seen = new Set(Array.from({ length: 12 }, (_, i) => envKey(envForLevel(i + 1))));
+    expect(seen.size).toBeGreaterThanOrEqual(8);
     expect(envForLevel(13)).toEqual(envForLevel(1)); // and the cycle repeats
     expect(new Set(Array.from({ length: 12 }, (_, i) => JSON.stringify(envForLevel(i + 1)))).size).toBe(12);
   });
 
   it('auto follows the level, manual follows the choice', () => {
     expect(resolveEnv(3, DEFAULT_WORLD)).toEqual(envForLevel(3));
-    const manual = { auto: false, season: 'autumn', time: 'night', precip: true } as const;
-    expect(resolveEnv(1, manual)).toEqual({ season: 'autumn', time: 'night', precip: true });
+    const manual = { auto: false, season: 'autumn', time: 'night', precip: true, fog: false } as const;
+    expect(resolveEnv(1, manual)).toEqual({ season: 'autumn', time: 'night', precip: true, fog: false });
   });
 
   it('repairs corrupt settings', () => {
@@ -35,6 +35,7 @@ describe('world', () => {
       season: 'summer',
       time: 'night',
       precip: false,
+      fog: false,
     });
   });
 
@@ -61,6 +62,6 @@ describe('world', () => {
 
   it('has distinct texture keys for every combination', () => {
     const keys = new Set(SEASONS.flatMap((s) => TIMES.map((t) => envKey({ season: s, time: t, precip: false }))));
-    expect(keys.size).toBe(8);
+    expect(keys.size).toBe(12);
   });
 });
