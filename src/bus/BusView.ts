@@ -2,8 +2,10 @@ import Phaser from 'phaser';
 import { C, FONT, hex, luminance, shade } from '../config';
 import { drawStar } from '../ui/draw';
 import { mulberry32 } from '../core/rng';
+import { MAX_HEALTH } from '../core/rules';
 import type { BusDesign, LightType, WheelType } from './design';
 import { computeLayout, type BusLayout } from './geometry';
+import { planParts, type Part } from './parts';
 
 type G = Phaser.GameObjects.Graphics;
 
@@ -107,6 +109,7 @@ export class BusView extends Phaser.GameObjects.Container {
   private damageG: G | null = null;
   /** 0 = like new, 1 = wrecked. */
   private damage = 0;
+  private parts: readonly Part[] = [];
   private hopY = 0;
   private tiltA = 0;
   private blinkerG: G | null = null;
@@ -135,9 +138,15 @@ export class BusView extends Phaser.GameObjects.Container {
     if (this.wipersOn) this.applyWipers(true);
   }
 
-  /** How battered the bus looks: 0 = new … 1 = wrecked (scratches, dents, soot, cracked glass, a broken headlight). */
+  /** How battered the bus looks: 0 = new … 1 = wrecked. It is shown as concrete broken parts (see `planParts`). */
   setDamage(amount: number): void {
     this.damage = Math.min(Math.max(amount, 0), 1);
+    this.setParts(planParts(this.damage * MAX_HEALTH, this.layout));
+  }
+
+  /** Shows exactly these parts as broken (the depot passes what is still left to fix). */
+  setParts(parts: readonly Part[]): void {
+    this.parts = parts;
     this.drawDamage();
   }
 
@@ -145,75 +154,88 @@ export class BusView extends Phaser.GameObjects.Container {
     const g = this.damageG;
     if (!g) return;
     g.clear();
-    const d = this.damage;
-    if (d < 0.04) return;
+    for (const part of this.parts) this.drawPart(g, part);
+  }
+
+  private drawPart(g: G, part: Part): void {
     const L = this.layout;
-    const rng = mulberry32(77); // the same cracks every time, they only get more
-    const W = L.boxFrontX - L.backX;
-    const lowTop = L.bottom - 70;
-
-    // scratches along the lower body
-    g.lineStyle(3, C.ink, 0.5);
-    for (let i = 0; i < Math.round(d * 12); i++) {
-      const x = L.backX + 30 + rng() * (W - 90);
-      const y = lowTop + rng() * 44;
-      g.lineBetween(x, y, x + 16 + rng() * 26, y - 5 - rng() * 12);
-    }
-
-    // dents: darker, dull patches, more at the front where we hit things
-    const dents = Math.round(d * 6);
-    for (let i = 0; i < dents; i++) {
-      const front = i % 2 === 0;
-      const x = front ? L.boxFrontX - 40 - rng() * 120 : L.backX + 40 + rng() * (W - 160);
-      const y = L.bottom - 40 - rng() * 70;
-      g.fillStyle(0x000000, 0.16 + 0.1 * d);
-      g.fillEllipse(x, y, 30 + rng() * 34, 16 + rng() * 14);
-      g.lineStyle(2, 0xffffff, 0.35);
-      g.beginPath();
-      g.arc(x, y, 12 + rng() * 10, Math.PI * 1.1, Math.PI * 1.7, false);
-      g.strokePath();
-    }
-
-    // cracked windows: cracks fan out from a hit point
-    const cracked = Math.min(L.windows.length, Math.round(d * L.windows.length * 0.9));
-    for (let i = 0; i < cracked; i++) {
-      const w = L.windows[(i * 3) % L.windows.length]!;
-      const cx = w.x + w.w * (0.3 + 0.4 * rng());
-      const cy = w.y + w.h * (0.3 + 0.4 * rng());
-      g.lineStyle(2.5, C.ink, 0.75);
-      for (let k = 0; k < 6; k++) {
-        const a = (k / 6) * Math.PI * 2 + rng() * 0.5;
-        const len = 12 + rng() * 22;
-        g.lineBetween(cx, cy, cx + Math.cos(a) * len, cy + Math.sin(a) * len);
+    const at = part;
+    const rng = mulberry32((part.index + 3) * 104729 + part.kind.charCodeAt(0));
+    switch (part.kind) {
+      case 'scratch': {
+        g.lineStyle(3, C.ink, 0.5);
+        for (let k = 0; k < 3; k++) {
+          const x = at.x + k * 9 - 9;
+          const y = at.y + rng() * 8;
+          g.lineBetween(x, y, x + 16 + rng() * 22, y - 5 - rng() * 12);
+        }
+        break;
       }
-      g.lineStyle(1.5, C.ink, 0.6);
-      g.strokeCircle(cx, cy, 8 + rng() * 5);
+      case 'dent': {
+        g.fillStyle(0x000000, 0.26);
+        g.fillEllipse(at.x, at.y, 40 + rng() * 26, 20 + rng() * 12);
+        g.lineStyle(2, 0xffffff, 0.4);
+        g.beginPath();
+        g.arc(at.x, at.y, 14 + rng() * 8, Math.PI * 1.1, Math.PI * 1.7, false);
+        g.strokePath();
+        break;
+      }
+      case 'window': {
+        g.lineStyle(2.5, C.ink, 0.8);
+        for (let k = 0; k < 6; k++) {
+          const a = (k / 6) * Math.PI * 2 + rng() * 0.5;
+          const len = 14 + rng() * 18;
+          g.lineBetween(at.x, at.y, at.x + Math.cos(a) * len, at.y + Math.sin(a) * len * 0.7);
+        }
+        g.lineStyle(1.5, C.ink, 0.6);
+        g.strokeCircle(at.x, at.y, 8 + rng() * 5);
+        break;
+      }
+      case 'windshield': {
+        const s = L.windshield;
+        g.lineStyle(2.5, C.ink, 0.85);
+        g.lineBetween(s.x + 2, s.y + 6, s.x + s.w - 2, s.y + s.h * 0.6);
+        g.lineBetween(s.x + s.w - 2, s.y + 10, s.x + 3, s.y + s.h * 0.8);
+        break;
+      }
+      case 'soot': {
+        g.fillStyle(0x000000, 0.3);
+        g.fillEllipse(at.x, at.y, 70, 40);
+        g.fillEllipse(at.x - 56, at.y - 10, 50, 26);
+        break;
+      }
+      case 'headlight': {
+        g.fillStyle(0x2d2a32, 0.8);
+        g.fillCircle(at.x, at.y, 13);
+        g.lineStyle(2.5, 0xffffff, 0.85);
+        g.lineBetween(at.x - 9, at.y - 8, at.x + 9, at.y + 9);
+        g.lineBetween(at.x + 8, at.y - 9, at.x - 8, at.y + 8);
+        break;
+      }
+      case 'bumper': {
+        g.fillStyle(0x4a4650, 1);
+        g.lineStyle(3, C.ink, 1);
+        g.fillPoints([new Phaser.Math.Vector2(L.frontX - 16, L.bottom - 8), new Phaser.Math.Vector2(L.frontX + 8, L.bottom - 2), new Phaser.Math.Vector2(L.frontX + 4, L.bottom + 8), new Phaser.Math.Vector2(L.frontX - 20, L.bottom + 1)], true);
+        break;
+      }
+      case 'wheel': {
+        // a flat tyre: a dark sagging patch at the bottom and a puncture star
+        const r = L.wheelR;
+        g.fillStyle(0x1b1920, 0.85);
+        g.fillEllipse(at.x, -r * 0.18, r * 1.7, r * 0.5);
+        g.lineStyle(3, C.yellow, 1);
+        for (let k = 0; k < 4; k++) {
+          const a = (k / 4) * Math.PI + 0.4;
+          g.lineBetween(at.x - Math.cos(a) * 9, -r * 0.62 - Math.sin(a) * 9, at.x + Math.cos(a) * 9, -r * 0.62 + Math.sin(a) * 9);
+        }
+        break;
+      }
     }
-    if (d > 0.3) {
-      const s = L.windshield;
-      g.lineStyle(2.5, C.ink, 0.8);
-      g.lineBetween(s.x + 2, s.y + 6, s.x + s.w - 2, s.y + s.h * 0.6);
-      g.lineBetween(s.x + s.w - 2, s.y + 10, s.x + 3, s.y + s.h * 0.8);
-    }
+  }
 
-    // soot at the front and a broken headlight
-    if (d > 0.45) {
-      g.fillStyle(0x000000, 0.28);
-      g.fillEllipse(L.boxFrontX - 30, L.top + 34, 70, 40);
-      g.fillEllipse(L.boxFrontX - 90, L.top + 22, 50, 26);
-      g.fillStyle(0x2d2a32, 0.75);
-      g.fillCircle(L.headlight.x, L.headlight.y, 13);
-      g.lineStyle(2.5, 0xffffff, 0.8);
-      g.lineBetween(L.headlight.x - 9, L.headlight.y - 8, L.headlight.x + 9, L.headlight.y + 9);
-      g.lineBetween(L.headlight.x + 8, L.headlight.y - 9, L.headlight.x - 8, L.headlight.y + 8);
-    }
-
-    // a bumper that hangs down
-    if (d > 0.6) {
-      g.fillStyle(0x4a4650, 1);
-      g.lineStyle(3, C.ink, 1);
-      g.fillPoints([new Phaser.Math.Vector2(L.frontX - 16, L.bottom - 8), new Phaser.Math.Vector2(L.frontX + 8, L.bottom - 2), new Phaser.Math.Vector2(L.frontX + 4, L.bottom + 8), new Phaser.Math.Vector2(L.frontX - 20, L.bottom + 1)], true);
-    }
+  /** Where a broken part is on screen (for tapping it). */
+  partWorld(part: Part): { x: number; y: number } {
+    return { x: this.x + part.x * this.scaleX, y: this.y + part.y * this.scaleY };
   }
 
   /** Positions the bus on the road, composing its lane height & steering tilt with any speed-bump jolt. */

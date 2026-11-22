@@ -18,6 +18,8 @@ export const POINTS = {
   gentleBump: 3,
   /** Filled up when the tank was getting empty: planning ahead. */
   refuel: 4,
+  /** For leaving the depot with a bus that is as good as new. */
+  repaired: 6,
   /** The tank ran dry and somebody had to bring petrol. */
   noFuel: -10,
   /** Stopped to let pedestrians cross at an uncontrolled zebra crossing. */
@@ -229,17 +231,6 @@ export function fuelUse(dx: number, dt: number, v: number, accelerating: boolean
 
 /** With an empty tank the bus only crawls. */
 export const fuelPerformance = (fuel: number): number => (fuel > 0 ? 1 : 0.25);
-
-/** The station fixes the bus for points: half a point per percent. */
-export const REPAIR_COST_PER_PERCENT = 0.5;
-
-/** How much we can repair for the points we have, and what it costs. */
-export function repairPlan(missingHealth: number, score: number): { percent: number; cost: number } {
-  const missing = Math.max(0, Math.round(missingHealth));
-  const affordable = Math.floor(Math.max(0, score) / REPAIR_COST_PER_PERCENT);
-  const percent = Math.min(missing, affordable);
-  return { percent, cost: Math.ceil(percent * REPAIR_COST_PER_PERCENT) };
-}
 
 // ------------------------------------------------------------------ nitro: a short burst of speed
 

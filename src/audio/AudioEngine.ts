@@ -409,6 +409,21 @@ class AudioEngine {
     }
   }
 
+  /** One clank of a tool: a part is being hit. */
+  clank(): void {
+    if (!this.live()) return;
+    this.tone({ freq: 900, dur: 0.09, type: 'triangle', vol: 0.16, slideTo: 380 });
+    this.noise(0.07, 0.12, 2500, 0.01, 900);
+  }
+
+  /** A gulp of petrol going into the tank. */
+  glug(): void {
+    if (!this.live()) return;
+    this.noise(0.35, 0.14, 500, 0, 900);
+    this.tone({ freq: 300, dur: 0.12, type: 'sine', vol: 0.14, slideTo: 520 });
+    this.tone({ freq: 380, dur: 0.12, type: 'sine', vol: 0.14, slideTo: 640, at: 0.12 });
+  }
+
   /** A worn-out engine coughs. */
   cough(): void {
     if (!this.live()) return;

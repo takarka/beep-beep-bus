@@ -37,6 +37,8 @@ export interface LevelData {
   items: LevelItem[];
   /** Where the gas stations are: the world x the bus front should reach (like a stop's `zoneEnd`). */
   stations: number[];
+  /** Where the repair depots are (world x the bus front should reach), like `stations`. */
+  depots: number[];
   /** World x of the speed bumps (from level 2). */
   bumps: number[];
   /** World x of the stop lines of uncontrolled pedestrian crossings (from level 2). */
@@ -84,6 +86,9 @@ export const childrenCountFor = (level: number): number => (level < 4 ? 0 : 1);
 /** Gas stations: none on level 1 (no petrol system yet), one on levels 2–5, two on 6–9, three after that. */
 export const stationCountFor = (level: number): number => (level < 2 ? 0 : level <= 5 ? 1 : level <= 9 ? 2 : 3);
 
+/** Repair depots (the bus is fixed there by hand): none on level 1, one per route after that. */
+export const depotCountFor = (level: number): number => (level < 2 ? 0 : 1);
+
 /** Bus speed limit for a level (world px/s): gentle at first, rising smoothly across all 24 routes. */
 export const maxSpeedFor = (level: number): number => Math.min(340 + (Math.max(1, level) - 1) * 8, 510);
 
@@ -117,6 +122,7 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
   const wantBridge = hasBridgeFor(level);
   const neededGaps =
     stationCountFor(level) +
+    depotCountFor(level) +
     bumpCountFor(level) +
     crosswalkCountFor(level) +
     stopSignCountFor(level) +
@@ -159,6 +165,8 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
   }
 
   const spots = items.map((i) => (i.kind === 'stop' ? i.zoneEnd : i.lineX));
+  // The stretch after the last stop is a gap too (a bridge without a gap of its own goes after it).
+  spots.push(x);
   const gaps = spots.slice(1).map((_, i) => i).filter((g) => g !== bridgeGapIdx);
 
   // Gas stations go into gaps spread evenly along the route, in the middle of the gap.
@@ -172,6 +180,18 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
     stations.push(Math.round((spots[g]! + spots[g + 1]!) / 2));
   }
   stations.sort((a, b) => a - b);
+
+  // Repair depots take the next free gaps, a bit earlier in each part of the route than the gas stations.
+  const depots: number[] = [];
+  const nDepots = depotCountFor(level);
+  for (let k = 0; k < nDepots && gaps.length > 0; k++) {
+    const want = Math.floor(((k + 0.2) / nDepots) * (spots.length - 1));
+    let best = 0;
+    for (let i = 1; i < gaps.length; i++) if (Math.abs(gaps[i]! - want) < Math.abs(gaps[best]! - want)) best = i;
+    const g = gaps.splice(best, 1)[0]!;
+    depots.push(Math.round((spots[g]! + spots[g + 1]!) / 2));
+  }
+  depots.sort((a, b) => a - b);
 
   // Speed bumps go into the other gaps, well away from lights and stops.
   const bumps: number[] = [];
@@ -215,8 +235,7 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
 
   let finishX = x;
   if (wantBridge && bridges.length === 0) {
-    const lastSpot = spots[spots.length - 1] ?? FIRST_ITEM_X;
-    const x0 = lastSpot + 850;
+    const x0 = x + 850;
     const x1 = x0 + bridgeLen;
     bridges.push({ x0, x1, arch: BRIDGE_ARCH });
     finishX = Math.max(finishX, x1 + 1100);
@@ -225,6 +244,7 @@ export function generateLevel(level: number, seed = level * 7919): LevelData {
     level,
     items,
     stations,
+    depots,
     bumps,
     crosswalks,
     stopSigns,

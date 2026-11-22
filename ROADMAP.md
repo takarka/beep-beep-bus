@@ -56,6 +56,17 @@
 
 - Damage and petrol carry over from one level to the next (saved per bus in the garage, shown on the map, results, menu and garage cards; fixed at gas stations)
 
+## ✅ Version 1.0: Repair depot (done)
+
+**Idea:** the gas station only sells petrol. Broken bits are fixed at a separate **depot** with its own screen, where the child repairs the bus by tapping each broken part.
+
+1. **Parts model** (`src/bus/parts.ts`, pure + tests): the health number (0–100) is turned into a list of concrete broken parts (cracked windows, windshield, broken headlight, hanging bumper, dents, scratches, soot, damaged tyres). Each part has the health it gives back and how many taps it needs. The same list is drawn on the bus on the road and in the depot, so the child sees on the route what will have to be fixed.
+2. **Level**: one depot on every level from 2 in their own gaps, away from lights, stops and stations; marked on the route bar.
+3. **On the road**: a workshop building with a wrench sign, an orange stop zone and an arrow (like a bus stop); a warning board far ahead. Stop in the zone → the route freezes and the **Depot** screen opens. Helper mode brakes for the depot when the bus is in a bad state.
+4. **Depot screen** (`DepotScene`): the bus in a workshop bay; every broken part pulses with a wrench bubble; each tap = a spark, a clank and a progress ring; when a part is fixed it flashes and the health bar climbs; 100% = fanfare. A pump button refuels the tank (a few taps). A big green "Drive on" button returns to the route exactly where it stopped (leaving early with a half-fixed bus is allowed).
+5. **Gas station**: now only free petrol (no repair).
+6. **Texts** ru/kk/en, sounds from existing synth sounds, **tests** (parts, level), browser check on desktop and phone sizes.
+
 ## 🔜 Version 0.2: mobile and polish (remaining)
 
 - [ ] Phone testing: button sizes, safe areas (notch), fullscreen on the first tap

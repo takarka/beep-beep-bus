@@ -3,11 +3,9 @@ import { generateLevel, stationCountFor } from '../src/core/level';
 import {
   MAX_FUEL,
   POINTS,
-  REPAIR_COST_PER_PERCENT,
   ScoreKeeper,
   fuelPerformance,
   fuelUse,
-  repairPlan,
 } from '../src/core/rules';
 
 /** A typical careful route: cruising at 250 px/s with waits at lights and stops. */
@@ -67,16 +65,7 @@ describe('petrol', () => {
   });
 });
 
-describe('repair at the station', () => {
-  it('costs half a point per percent, limited by the points we have', () => {
-    expect(repairPlan(40, 100)).toEqual({ percent: 40, cost: 20 });
-    expect(repairPlan(40, 10)).toEqual({ percent: 20, cost: 10 }); // can only afford half of it
-    expect(repairPlan(40, 0)).toEqual({ percent: 0, cost: 0 });
-    expect(repairPlan(0, 100)).toEqual({ percent: 0, cost: 0 });
-    for (const score of [1, 7, 33, 90]) expect(repairPlan(60, score).cost).toBeLessThanOrEqual(score);
-    expect(REPAIR_COST_PER_PERCENT).toBe(0.5);
-  });
-
+describe('petrol and paying', () => {
   it('paying is not a mistake and never goes below zero', () => {
     const s = new ScoreKeeper();
     s.add(30);
