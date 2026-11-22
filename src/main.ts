@@ -1,5 +1,10 @@
-import '@fontsource/rubik/700.css';
-import '@fontsource/rubik/800.css';
+// Only the alphabets the game uses (Kazakh letters live in cyrillic-ext); the other subsets were dead weight.
+import '@fontsource/rubik/cyrillic-700.css';
+import '@fontsource/rubik/cyrillic-800.css';
+import '@fontsource/rubik/cyrillic-ext-700.css';
+import '@fontsource/rubik/cyrillic-ext-800.css';
+import '@fontsource/rubik/latin-700.css';
+import '@fontsource/rubik/latin-800.css';
 import Phaser from 'phaser';
 import { audio } from './audio/AudioEngine';
 import { C, GAME_H, GAME_W } from './config';
