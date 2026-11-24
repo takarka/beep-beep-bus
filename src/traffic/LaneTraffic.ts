@@ -118,9 +118,11 @@ export class LaneTraffic {
       parked?: readonly number[];
       stops?: readonly number[];
       bridges?: readonly BridgeData[];
+      /** No other vehicles at all (not even parked ones). */
+      off?: boolean;
     },
   ) {
-    this.plan = lanePlan(opts.level);
+    this.plan = opts.off ? { ...lanePlan(opts.level), enabled: false } : lanePlan(opts.level);
     this.zones = bumpZones(opts.bumps, true);
     this.bridges = opts.bridges ?? [];
     this.aheadTimer = randRange(this.rng, 4, 8);
@@ -134,7 +136,7 @@ export class LaneTraffic {
 
   /** One vehicle already ahead of us at the start, plus any parked cars on the route. */
   prewarm(playerX: number): void {
-    for (const px of this.opts.parked ?? []) this.spawnParked(px);
+    if (!this.opts.off) for (const px of this.opts.parked ?? []) this.spawnParked(px);
     if (!this.plan.enabled) return;
     this.spawn(playerX + 1100 + this.rng() * 500);
   }

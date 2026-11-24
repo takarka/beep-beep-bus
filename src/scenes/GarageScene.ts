@@ -1,13 +1,17 @@
 import Phaser from "phaser";
 import { audio } from "../audio/AudioEngine";
 import { BusView } from "../bus/BusView";
+import type { BusDesign } from "../bus/design";
 import {
   GARAGE_SIZE,
+  type BusStatus,
+  type Garage,
   freshStatus,
   loadGarage,
   removeBus,
   saveGarage,
   selectBus,
+  updateBusStatus,
 } from "../bus/garage";
 import { BODY_SIZE } from "../bus/geometry";
 import { C, GAME_W } from "../config";
@@ -170,6 +174,16 @@ export class GarageScene extends Phaser.Scene {
         this.scene.restart();
       });
 
+      // Repair depot for this bus, between the games: fix the broken parts and fill the tank
+      const needsCare = st.health < MAX_HEALTH || st.fuel < MAX_FUEL;
+      const fix = new Button(this, x + CARD_W / 2 - 46, CARD_Y - CARD_H / 2 + 46, {
+        r: 32,
+        color: needsCare ? C.blue : 0xb9b0a0,
+        icon: (g, sz) => Icons.wrench(g, sz),
+        onClick: () => this.openDepot(garage, i, design, st),
+      });
+      if (needsCare) this.tweens.add({ targets: fix, scale: { from: 1, to: 1.1 }, yoyo: true, repeat: -1, duration: 700, ease: "Sine.easeInOut" });
+
       const by = CARD_Y + 105;
       new Button(this, x - 90, by, {
         r: 38,
@@ -210,6 +224,21 @@ export class GarageScene extends Phaser.Scene {
         },
       });
     }
+  }
+
+  /** The repair depot screen for one saved bus; when the child drives out, the bus's new state is saved. */
+  private openDepot(garage: Garage, slot: number, design: BusDesign, st: BusStatus): void {
+    audio.select();
+    this.scene.start("Depot", {
+      design,
+      health: st.health,
+      fuel: st.fuel,
+      fuelActive: true,
+      onDone: (r: { health: number; fuel: number }) => {
+        saveGarage(updateBusStatus(garage, slot, { health: Math.max(st.health, r.health), fuel: Math.max(st.fuel, r.fuel) }));
+        this.scene.start("Garage");
+      },
+    });
   }
 
   private go(scene: string, data?: object): void {

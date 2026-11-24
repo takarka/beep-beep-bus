@@ -174,6 +174,18 @@ export class MenuScene extends Phaser.Scene {
       },
     });
     label(this, 448, 650, t('damageOpt'), { size: 28, color: C.ink, stroke: C.cream, strokeThickness: 5 }).setOrigin(0, 0.5);
+    // Traffic on / off: with it off the road is empty, only our bus.
+    const cars: Button = new Button(this, 760, 650, {
+      r: 36,
+      color: getSettings().traffic ? C.green : ASSIST_OFF,
+      icon: (g, s) => Icons.car(g, s),
+      onClick: () => {
+        const on = !getSettings().traffic;
+        updateSettings({ traffic: on });
+        cars.setColor(on ? C.green : ASSIST_OFF);
+      },
+    });
+    label(this, 808, 650, t('trafficOpt'), { size: 28, color: C.ink, stroke: C.cream, strokeThickness: 5 }).setOrigin(0, 0.5);
     label(this, 118, 650, t('assist'), { size: 28, color: C.ink, stroke: C.cream, strokeThickness: 5 }).setOrigin(0, 0.5);
   }
 

@@ -272,6 +272,7 @@ export class DriveScene extends Phaser.Scene {
       level: this.level.level,
       bumps: this.level.bumps,
       bridges: this.level.bridges,
+      off: !getSettings().traffic,
     });
     this.traffic.prewarm(Phaser.Math.Clamp(START_X - this.camLead, 0, this.level.length - GAME_W));
     this.lane = new LaneTraffic(this, {
@@ -281,6 +282,7 @@ export class DriveScene extends Phaser.Scene {
       parked: this.level.parked,
       stops: this.level.items.filter((i) => i.kind === 'stop').map((i) => i.zoneEnd),
       bridges: this.level.bridges,
+      off: !getSettings().traffic,
     });
     this.lane.prewarm(START_X);
     this.bus.setPassengers(0);
@@ -1678,7 +1680,7 @@ export class DriveScene extends Phaser.Scene {
     // "Helper" mode: the bus brakes by itself before red lights and bus stops, and pulls back to the curb lane for stops.
     if (this.assist && this.phase === 'driving') {
       const f0 = this.bus.frontWorldX();
-      if (this.busLane.lane === 0 && this.level.parked.some((px) => px - f0 > -40 && px - f0 < 650)) {
+      if (this.busLane.lane === 0 && getSettings().traffic && this.level.parked.some((px) => px - f0 > -40 && px - f0 < 650)) {
         this.requestLane(1);
       }
       if (this.busLane.lane === 1) {

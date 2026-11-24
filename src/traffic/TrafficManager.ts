@@ -56,7 +56,7 @@ export class TrafficManager {
 
   constructor(
     private readonly scene: Phaser.Scene,
-    private readonly opts: { night: boolean; level: number; bumps: readonly number[]; bridges?: readonly BridgeData[] },
+    private readonly opts: { night: boolean; level: number; bumps: readonly number[]; bridges?: readonly BridgeData[]; off?: boolean },
   ) {
     this.zones = bumpZones(opts.bumps, false);
     this.bridges = opts.bridges ?? [];
@@ -64,6 +64,7 @@ export class TrafficManager {
 
   /** Puts a few vehicles on the road so it isn't empty at the start. */
   prewarm(scrollX: number): void {
+    if (this.opts.off) return;
     let x = scrollX + 140 + this.rng() * 200;
     while (x < scrollX + GAME_W + 200 && this.vehicles.length < 6) {
       const v = this.spawn(x);
@@ -145,6 +146,7 @@ export class TrafficManager {
       return !gone;
     });
 
+    if (this.opts.off) return;
     this.timer -= dt;
     if (this.timer <= 0) this.timer = this.trySpawn(scrollX) ? spawnDelay(this.rng, this.opts.level) : 0.4;
   }

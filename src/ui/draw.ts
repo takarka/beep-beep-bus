@@ -328,6 +328,21 @@ export const Icons = {
     g.fillCircle(-s * 0.2, s * 0.18, s * 0.1);
     g.fillCircle(s * 0.22, s * 0.18, s * 0.1);
   },
+  /** A little car (other road users). */
+  car(g: G, s: number, color: number = C.red) {
+    g.lineStyle(Math.max(2, s * 0.05), C.ink, 1);
+    g.fillStyle(color, 1);
+    g.fillRoundedRect(-s * 0.42, -s * 0.02, s * 0.84, s * 0.24, s * 0.06);
+    g.strokeRoundedRect(-s * 0.42, -s * 0.02, s * 0.84, s * 0.24, s * 0.06);
+    g.fillRoundedRect(-s * 0.24, -s * 0.24, s * 0.46, s * 0.24, { tl: s * 0.1, tr: s * 0.12, bl: 0, br: 0 });
+    g.strokeRoundedRect(-s * 0.24, -s * 0.24, s * 0.46, s * 0.24, { tl: s * 0.1, tr: s * 0.12, bl: 0, br: 0 });
+    g.fillStyle(C.glass, 1);
+    g.fillRect(-s * 0.18, -s * 0.18, s * 0.16, s * 0.14);
+    g.fillRect(s * 0.02, -s * 0.18, s * 0.14, s * 0.14);
+    g.fillStyle(C.ink, 1);
+    g.fillCircle(-s * 0.24, s * 0.22, s * 0.09);
+    g.fillCircle(s * 0.24, s * 0.22, s * 0.09);
+  },
   dice(g: G, s: number) {
     g.fillStyle(C.cream, 1);
     g.fillRoundedRect(-s * 0.32, -s * 0.32, s * 0.64, s * 0.64, s * 0.12);
