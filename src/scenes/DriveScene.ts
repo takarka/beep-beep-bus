@@ -25,9 +25,9 @@ import {
 } from '../core/rules';
 import { TrafficLightModel, type LightState } from '../core/traffic';
 import { t, type TextKey } from '../i18n';
-import { drawBench, drawShelter } from '../ui/stopShelter';
+import { benchSeats, drawBench, drawShelter, shelterSeats, type Seat } from '../ui/stopShelter';
 import { Icons, drawChildrenSign, drawCrosswalkSign, drawMiniLight, drawPlaceIcon, drawRoadStopSign, drawStar, drawStopSign } from '../ui/draw';
-import { GROUND_Y, PASSENGER_VARIANTS, SIDEWALK_FEET_Y, STREET_Y } from '../ui/textures';
+import { GROUND_Y, PASSENGER_VARIANTS, SIDEWALK_FEET_Y, SIT_HIP, STREET_Y } from '../ui/textures';
 import { BridgeView } from '../ui/bridge';
 import { createScenery } from '../ui/scenery';
 import { cityForLevel, landmarkForLevel } from '../core/campaign';
@@ -49,9 +49,12 @@ const ROAD_BOTTOM = STREET_Y + 180;
 const PAX_SCALE = 0.85;
 
 interface StopPerson {
+  /** Which of the passenger pictures this person uses (standing: `pax<n>`, sitting: `paxSit<n>`). */
+  variant: number;
+  /** Sitting on a bench until the bus stops; then they get up and walk over. */
+  sitting: boolean;
   img: Phaser.GameObjects.Image;
   arm: G;
-  bubble: Phaser.GameObjects.Container;
   destination: StopPlace;
 }
 
@@ -159,6 +162,7 @@ export class DriveScene extends Phaser.Scene {
   private emptyTimer = 0;
   private stations: StationRt[] = [];
   private stillTimeSt = 0;
+  private fuelPrevV = 0;
   /** Nitro: a short burst of speed. */
   private nitro: number = NITRO.max;
   private nitroLocked = false;
@@ -238,6 +242,7 @@ export class DriveScene extends Phaser.Scene {
     this.emptyTimer = 0;
     this.stations = [];
     this.stillTimeSt = 0;
+    this.fuelPrevV = 0;
     this.nitro = NITRO.max;
     this.nitroLocked = false;
     this.boosting = false;
@@ -546,22 +551,44 @@ export class DriveScene extends Phaser.Scene {
     sign.fillRect(sx - 5, 470, 10, SIDEWALK_FEET_Y + 4 - 470);
     sign.strokeRect(sx - 5, 470, 10, SIDEWALK_FEET_Y + 4 - 470);
     drawStopSign(sign, sx, 530, 30);
-    drawPlaceIcon(sign, data.place, sx, 468, 25);
 
     // A glass shelter with a bench inside, and one more bench beside it (behind the waiting people).
     const shelterW = Math.min(260, Math.max(150, (x1 - x0) * 0.62));
     const furniture = this.add.graphics().setDepth(19);
     drawShelter(furniture, x0 + 22, SIDEWALK_FEET_Y, shelterW, night);
-    if (x1 - x0 - shelterW > 140) drawBench(furniture, x1 - 120, SIDEWALK_FEET_Y, 96);
+    const seats: Seat[] = shelterSeats(x0 + 22, SIDEWALK_FEET_Y, shelterW);
+    if (x1 - x0 - shelterW > 140) {
+      drawBench(furniture, x1 - 120, SIDEWALK_FEET_Y, 96);
+      seats.push(...benchSeats(x1 - 120, SIDEWALK_FEET_Y, 96));
+    }
+    // some people sit on the benches (about half of them, as long as there are free seats), the rest stand
+    for (let i = seats.length - 1; i > 0; i--) {
+      const j = Math.floor(this.rng() * (i + 1));
+      [seats[i], seats[j]] = [seats[j]!, seats[i]!];
+    }
+    const sitters: Array<Seat | null> = Array.from({ length: data.waiting }, () => (seats.length > 0 && this.rng() < 0.55 ? seats.pop()! : null));
+    const standing = sitters.filter((x) => x === null).length;
+    const taken = sitters.filter((x): x is Seat => x !== null).map((x) => x.x);
 
-    // Waiting passengers with animated waving arm and destination speech bubble
+    // Waiting passengers with an animated waving arm
     const people: StopPerson[] = [];
     const span = Math.max(80, x1 - x0 - 80);
+    let nextStanding = 0;
     for (let i = 0; i < data.waiting; i++) {
-      const px = x0 + 40 + (span * (i + 0.5)) / data.waiting;
+      const seat = sitters[i] ?? null;
+      let px: number;
+      if (seat) px = seat.x;
+      else {
+        px = x0 + 40 + (span * (nextStanding++ + 0.5)) / Math.max(1, standing);
+        // don't stand right in front of somebody who is sitting
+        if (taken.some((tx) => Math.abs(tx - px) < 30)) px += px + 40 < x1 ? 40 : -40;
+      }
       const dest = data.destinations[i] ?? data.place;
+      const variant = Math.floor(this.rng() * PASSENGER_VARIANTS);
+      const kidK = variant % 3 === 2 ? 0.75 : 1;
+      const sitY = seat ? seat.y + (SIT_HIP * kidK - 8) * PAX_SCALE : SIDEWALK_FEET_Y;
       const img = this.add
-        .image(px, SIDEWALK_FEET_Y, `pax${Math.floor(this.rng() * PASSENGER_VARIANTS)}`)
+        .image(px, sitY, seat ? `paxSit${variant}` : `pax${variant}`)
         .setOrigin(0.5, 1)
         .setScale(PAX_SCALE)
         .setDepth(21);
@@ -571,23 +598,11 @@ export class DriveScene extends Phaser.Scene {
       arm.fillRoundedRect(-4, -22, 8, 24, 4);
       arm.strokeRoundedRect(-4, -22, 8, 24, 4);
       arm.setAngle(15);
+      if (seat) arm.setVisible(false); // they wave once they are on their feet
 
-      const bubble = this.add.container(px, SIDEWALK_FEET_Y - 124).setDepth(24);
-      const bg = this.add.graphics();
-      bg.fillStyle(0xffffff, 0.96);
-      bg.lineStyle(3, C.ink, 1);
-      bg.fillRoundedRect(-22, -20, 44, 36, 10);
-      bg.strokeRoundedRect(-22, -20, 44, 36, 10);
-      bg.fillTriangle(-5, 15, 5, 15, 0, 23);
-      bg.lineBetween(-5, 16, 0, 23);
-      bg.lineBetween(5, 16, 0, 23);
-      drawPlaceIcon(bg, dest, 0, -2, 13);
-      bubble.add(bg);
-
-      // idle sway & gentle bubble float
-      this.tweens.add({ targets: img, angle: { from: -3, to: 3 }, yoyo: true, repeat: -1, duration: 600 + this.rng() * 400, ease: 'Sine.easeInOut' });
-      this.tweens.add({ targets: bubble, y: SIDEWALK_FEET_Y - 130, yoyo: true, repeat: -1, duration: 750 + this.rng() * 250, ease: 'Sine.easeInOut' });
-      people.push({ img, arm, bubble, destination: dest });
+      // idle sway (standing people only)
+      if (!seat) this.tweens.add({ targets: img, angle: { from: -3, to: 3 }, yoyo: true, repeat: -1, duration: 600 + this.rng() * 400, ease: 'Sine.easeInOut' });
+      people.push({ variant, sitting: seat !== null, img, arm, destination: dest });
     }
 
     // Bouncing arrow above the zone
@@ -831,7 +846,7 @@ export class DriveScene extends Phaser.Scene {
   private honk(): void {
     if (this.paused || this.phase === 'ended') return;
     const now = this.time.now;
-    if (now - this.lastHorn < 350) return;
+    if (now - this.lastHorn < 500) return;
     this.lastHorn = now;
     audio.horn(this.busBody);
     const lift = bridgeLiftAt(this.level.bridges, this.bus.x);
@@ -1234,11 +1249,13 @@ export class DriveScene extends Phaser.Scene {
     this.fuelText.setText(`${Math.round(this.fuel)}%`);
   }
 
-  /** Driving burns petrol: faster and harder pushing on the gas burns more. */
-  private useFuel(dx: number, dt: number, accelerating: boolean, boosting = false): void {
+  /** Driving burns petrol like a real engine (see `fuelUse`): speed, hard pushes, nitro, weight and wear all count. */
+  private useFuel(dt: number, accelerating: boolean, boosting = false): void {
     if (!this.fuelActive || this.phase === 'finishing') return;
     const before = Math.round(this.fuel);
-    this.fuel = Math.max(0, this.fuel - fuelUse(dx, dt, this.v, accelerating, boosting));
+    const accel = dt > 0 ? (this.v - this.fuelPrevV) / dt : 0;
+    this.fuelPrevV = this.v;
+    this.fuel = Math.max(0, this.fuel - fuelUse({ dt, v: this.v, accel, gas: accelerating, boosting, passengers: this.aboard, health: this.health }));
     if (Math.round(this.fuel) !== before) this.refreshFuelBar();
 
     if (this.fuel <= LOW_FUEL && this.fuel > 0 && !this.lowFuelShown) {
@@ -1636,13 +1653,24 @@ export class DriveScene extends Phaser.Scene {
       await this.wait(150);
     }
 
-    // Waiting people get on
+    // Waiting people get on. First everybody who was sitting gets up (all at once, they heard the doors open).
+    await Promise.all(
+      stop.people
+        .filter((p) => p.sitting)
+        .map(async (p, k) => {
+          await this.wait(k * 110);
+          this.tweens.killTweensOf(p.img);
+          await this.tween({ targets: p.img, y: p.img.y - 14, scaleY: PAX_SCALE * 1.04, duration: 140, ease: 'Quad.easeOut' });
+          p.img.setTexture(`pax${p.variant}`);
+          p.img.setScale(PAX_SCALE);
+          await this.tween({ targets: p.img, y: SIDEWALK_FEET_Y, duration: 200, ease: 'Quad.easeIn' });
+          p.sitting = false;
+        }),
+    );
     for (const p of stop.people) {
       this.tweens.killTweensOf(p.img);
       this.tweens.killTweensOf(p.arm);
-      this.tweens.killTweensOf(p.bubble);
       p.arm.destroy();
-      this.tweens.add({ targets: p.bubble, alpha: 0, scale: 0.6, duration: 180, onComplete: () => p.bubble.destroy() });
       p.img.setAngle(0);
       const door = this.nearestDoor(p.img.x);
       const dist = Math.abs(door - p.img.x);
@@ -1837,7 +1865,7 @@ export class DriveScene extends Phaser.Scene {
     this.nitroEffects();
     this.checkBumps(prevX);
     this.wearEffects(dt);
-    this.useFuel(dx, dt, gas && this.phase === 'driving', this.boosting);
+    this.useFuel(dt, gas && this.phase === 'driving', this.boosting);
 
     // Camera + parallax
     cam.scrollX = Phaser.Math.Clamp(this.bus.x - this.camLead, 0, this.level.length - GAME_W);
@@ -2047,6 +2075,7 @@ export class DriveScene extends Phaser.Scene {
       if (!s.waving && z - front < 1000 && front < z && s.people.length > 0) {
         s.waving = true;
         for (const p of s.people) {
+          if (p.sitting) continue;
           this.tweens.add({ targets: p.arm, angle: { from: -48, to: 22 }, yoyo: true, repeat: -1, duration: 170, ease: 'Sine.easeInOut' });
         }
       }
@@ -2071,7 +2100,7 @@ export class DriveScene extends Phaser.Scene {
         s.state = 'missed';
         this.tweens.add({ targets: s.arrow, alpha: 0, duration: 300 });
         for (const p of s.people) {
-          this.tweens.add({ targets: [p.img, p.arm, p.bubble], y: '-=30', yoyo: true, repeat: 2, duration: 160 });
+          this.tweens.add({ targets: [p.img, p.arm], y: '-=30', yoyo: true, repeat: 2, duration: 160 });
         }
         this.mistake(t('missedStop'), POINTS.missedStop, this.bus.x);
         continue;

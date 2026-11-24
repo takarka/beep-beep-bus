@@ -3,6 +3,7 @@ import { C, GAME_W, mix, shade } from '../config';
 import { mulberry32, pick, randInt } from '../core/rng';
 import { envKey, paletteFor, type Env, type Palette } from '../core/world';
 import { LANE_Y } from '../traffic/lanes';
+import { CITY_H, SKYLINE_H, makeCity, makeSkyline } from './cityscape';
 
 /**
  * All scenery is generated once at boot into textures, then used as
@@ -13,6 +14,8 @@ export const STREET_Y = 440; // top of the street texture on screen
 export const GROUND_Y = LANE_Y.main; // where bus wheels touch the road
 export const SIDEWALK_FEET_Y = 700; // where passengers stand on the near sidewalk
 export const PASSENGER_VARIANTS = 8;
+/** How high the hips of a sitting passenger are above the feet in the texture (px, grown-up). */
+export const SIT_HIP = 28;
 
 function make(scene: Phaser.Scene): Phaser.GameObjects.Graphics {
   return scene.make.graphics({ x: 0, y: 0 }, false);
@@ -76,53 +79,6 @@ const hills: Gen = (scene, env, p, key) => {
   }
   layer(p.hillFar, 90, [[2, 35, 0.3], [5, 14, 1.2], [9, 6, 2]]);
   layer(p.hillNear, 150, [[3, 28, 2.1], [7, 10, 0.4]]);
-  g.generateTexture(key, W, Hh);
-  g.destroy();
-};
-
-const city: Gen = (scene, env, p, key) => {
-  const W = 2048;
-  const Hh = 300;
-  const rng = mulberry32(42);
-  const g = make(scene);
-  const night = env.time === 'night';
-  const snow = night ? 0x9aa6c4 : 0xf4f8fb;
-  let x = 0;
-  while (x < W) {
-    let w = randInt(rng, 120, 210);
-    if (W - (x + w) < 120) w = W - x;
-    const h = randInt(rng, 120, 270);
-    const top = Hh - h;
-    const col = pick(rng, p.buildings);
-    g.fillStyle(col, 1);
-    g.lineStyle(4, p.ink, 0.85);
-    g.fillRect(x + 2, top, w - 4, h);
-    g.strokeRect(x + 2, top, w - 4, h);
-    // roof detail
-    const roof = randInt(rng, 0, 2);
-    g.fillStyle(shade(col, -0.25), 1);
-    if (roof === 0) g.fillRect(x + 2, top - 10, w - 4, 10);
-    if (roof === 1) {
-      g.fillRect(x + w * 0.6, top - 30, 24, 30);
-      g.strokeRect(x + w * 0.6, top - 30, 24, 30);
-    }
-    if (env.season === 'winter') {
-      g.fillStyle(snow, 1);
-      g.fillRoundedRect(x, top - 9, w, 11, 5);
-      if (roof === 1) g.fillRoundedRect(x + w * 0.6 - 3, top - 36, 30, 9, 4);
-    }
-    // windows (many more are lit at night)
-    const cols = Math.max(2, Math.floor((w - 20) / 34));
-    const rows = Math.floor((h - 30) / 40);
-    const cw = (w - 20) / cols;
-    for (let r = 0; r < rows; r++)
-      for (let c = 0; c < cols; c++) {
-        const lit = rng() < p.litWindowChance;
-        g.fillStyle(lit ? 0xfff3b0 : shade(col, -0.35), 1);
-        g.fillRect(x + 12 + c * cw + 4, top + 18 + r * 40, cw - 10, 22);
-      }
-    x += w;
-  }
   g.generateTexture(key, W, Hh);
   g.destroy();
 };
@@ -285,7 +241,8 @@ export function ensureEnvTextures(scene: Phaser.Scene, env: Env): void {
   if (scene.textures.exists(`street_${k}`)) return;
   const p = paletteFor(env);
   hills(scene, env, p, `hills_${k}`);
-  city(scene, env, p, `city_${k}`);
+  makeCity(scene, env, p, `city_${k}`);
+  makeSkyline(scene, env, p, `skyline_${k}`);
   trees(scene, env, p, `trees_${k}`);
   street(scene, env, p, `street_${k}`);
 }
@@ -297,6 +254,8 @@ function passengers(scene: Phaser.Scene): void {
   const skins = [0xf6d5b8, 0xe8b894, 0xc68e64, 0x8d5a3b];
   const hairs = [0x2d2a32, 0x6b3e26, 0xc58b3c, 0x9c4a2f, 0x8a8a8a];
   for (let i = 0; i < PASSENGER_VARIANTS; i++) {
+    const pants = pick(rng, [0x3d405b, 0x2d2a32, 0x6d597a]);
+    for (const seated of [false, true]) {
     const g = make(scene);
     const kid = i % 3 === 2;
     const s = kid ? 0.75 : 1;
@@ -306,14 +265,22 @@ function passengers(scene: Phaser.Scene): void {
     const bodyH = 42 * s;
     const headR = 15 * s;
     g.lineStyle(3, C.ink, 1);
-    // legs
-    g.fillStyle(pick(rng, [0x3d405b, 0x2d2a32, 0x6d597a]), 1);
-    g.fillRoundedRect(cx - 12 * s, feet - legH, 10 * s, legH, 3);
-    g.fillRoundedRect(cx + 2 * s, feet - legH, 10 * s, legH, 3);
+    // legs: standing, or sitting (thighs forward along the seat, shins down)
+    const hip = seated ? SIT_HIP * s : legH;
+    g.fillStyle(pants, 1);
+    if (seated) {
+      g.fillRoundedRect(cx - 12 * s, feet - hip - 2, 36 * s, 12 * s, 4);
+      g.strokeRoundedRect(cx - 12 * s, feet - hip - 2, 36 * s, 12 * s, 4);
+      g.fillRoundedRect(cx + 14 * s, feet - hip + 6, 10 * s, hip - 6, 3);
+      g.strokeRoundedRect(cx + 14 * s, feet - hip + 6, 10 * s, hip - 6, 3);
+    } else {
+      g.fillRoundedRect(cx - 12 * s, feet - legH, 10 * s, legH, 3);
+      g.fillRoundedRect(cx + 2 * s, feet - legH, 10 * s, legH, 3);
+    }
     // body
     const shirt = shirts[i % shirts.length]!;
     g.fillStyle(shirt, 1);
-    const bodyTop = feet - legH - bodyH + 4;
+    const bodyTop = feet - hip - bodyH + 4;
     g.fillRoundedRect(cx - 16 * s, bodyTop, 32 * s, bodyH, { tl: 12 * s, tr: 12 * s, bl: 4, br: 4 });
     g.strokeRoundedRect(cx - 16 * s, bodyTop, 32 * s, bodyH, { tl: 12 * s, tr: 12 * s, bl: 4, br: 4 });
     // arms
@@ -348,8 +315,9 @@ function passengers(scene: Phaser.Scene): void {
     g.fillStyle(0xf28482, 0.6);
     g.fillCircle(cx - 9 * s, hy + 6, 3);
     g.fillCircle(cx + 9 * s, hy + 6, 3);
-    g.generateTexture(`pax${i}`, 64, 120);
+    g.generateTexture(seated ? `paxSit${i}` : `pax${i}`, 64, 120);
     g.destroy();
+    }
   }
 }
 
@@ -400,6 +368,7 @@ const SUMMER_DAY: Env = { season: 'summer', time: 'day', precip: false };
 export class Backdrop {
   private clouds: Phaser.GameObjects.TileSprite;
   private hills: Phaser.GameObjects.TileSprite;
+  private skyline: Phaser.GameObjects.TileSprite;
   private city: Phaser.GameObjects.TileSprite;
   private trees: Phaser.GameObjects.TileSprite;
   private street: Phaser.GameObjects.TileSprite | null;
@@ -433,7 +402,8 @@ export class Backdrop {
     this.clouds = scene.add.tileSprite(0, 40, GAME_W, 200, 'cloud').setOrigin(0).setScrollFactor(0).setDepth(-9);
     this.clouds.setTint(p.cloudTint).setAlpha(p.moonVisible ? 0.75 : 0.95);
     this.hills = scene.add.tileSprite(0, 200, GAME_W, 240, `hills_${k}`).setOrigin(0).setScrollFactor(0).setDepth(-8);
-    this.city = scene.add.tileSprite(0, STREET_Y - 290, GAME_W, 300, `city_${k}`).setOrigin(0).setScrollFactor(0).setDepth(-7);
+    this.skyline = scene.add.tileSprite(0, STREET_Y - SKYLINE_H, GAME_W, SKYLINE_H, `skyline_${k}`).setOrigin(0).setScrollFactor(0).setDepth(-7.5);
+    this.city = scene.add.tileSprite(0, STREET_Y + 10 - CITY_H, GAME_W, CITY_H, `city_${k}`).setOrigin(0).setScrollFactor(0).setDepth(-7);
     this.trees = scene.add.tileSprite(0, STREET_Y + 32 - 230, GAME_W, 230, `trees_${k}`).setOrigin(0).setScrollFactor(0).setDepth(-6);
     this.street =
       opts.street === false
@@ -459,6 +429,7 @@ export class Backdrop {
     this.drift += dt * 12;
     this.clouds.tilePositionX = scrollX * 0.05 + this.drift;
     this.hills.tilePositionX = scrollX * 0.15;
+    this.skyline.tilePositionX = scrollX * 0.25;
     this.city.tilePositionX = scrollX * 0.4;
     this.trees.tilePositionX = scrollX * 0.85;
     if (this.street) this.street.tilePositionX = scrollX;

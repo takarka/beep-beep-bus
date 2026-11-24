@@ -338,7 +338,7 @@ describe('nitro', () => {
   });
 
   it('boosting costs more petrol', () => {
-    expect(fuelUse(1000, 4, 300, true, true)).toBeGreaterThan(fuelUse(1000, 4, 300, true, false) * 1.5);
+    expect(fuelUse({ dt: 4, v: 300, accel: 0, gas: true, boosting: true })).toBeGreaterThan(fuelUse({ dt: 4, v: 300, accel: 0, gas: true }) * 1.5);
   });
 
   it('is a clear boost, but not absurd', () => {

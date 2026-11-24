@@ -32,11 +32,15 @@ interface ToneOpts {
 
 export type AmbienceKind = 'rain' | 'snow' | 'night';
 
-const HORN_PRESETS: Record<BodyType, { f1: number; f2: number; dur: number; gap: number; filter: number }> = {
-  city: { f1: 440, f2: 554, dur: 0.14, gap: 0.2, filter: 1250 },
-  bendy: { f1: 294, f2: 370, dur: 0.18, gap: 0.24, filter: 900 },
-  school: { f1: 349, f2: 440, dur: 0.16, gap: 0.22, filter: 1050 },
-  van: { f1: 587, f2: 740, dur: 0.11, gap: 0.17, filter: 1500 },
+/**
+ * Real horns are a chord of two or three reedy notes held for a moment: big buses blast low and long,
+ * a retro van toots twice, high and short.
+ */
+const HORN_PRESETS: Record<BodyType, { notes: number[]; blasts: Array<[at: number, dur: number]>; filter: number; vol: number }> = {
+  city: { notes: [330, 415, 247], blasts: [[0, 0.62]], filter: 2300, vol: 0.085 },
+  bendy: { notes: [247, 311, 185], blasts: [[0, 0.85]], filter: 1900, vol: 0.095 },
+  school: { notes: [277, 349, 208], blasts: [[0, 0.7]], filter: 2100, vol: 0.09 },
+  van: { notes: [494, 622], blasts: [[0, 0.17], [0.23, 0.2]], filter: 2800, vol: 0.075 },
 };
 
 class AudioEngine {
@@ -268,10 +272,50 @@ class AudioEngine {
   horn(body: BodyType = 'city'): void {
     if (!this.live()) return;
     const p = HORN_PRESETS[body] ?? HORN_PRESETS.city;
-    for (const at of [0, p.gap]) {
-      this.tone({ freq: p.f1, dur: p.dur, type: 'sawtooth', vol: 0.11, at, attack: 0.005, filterHz: p.filter });
-      this.tone({ freq: p.f2, dur: p.dur, type: 'sawtooth', vol: 0.1, at, attack: 0.005, filterHz: p.filter });
+    for (const [at, dur] of p.blasts) this.blast(p.notes, at, dur, p.vol, p.filter);
+  }
+
+  /**
+   * One horn blast: each note is two slightly detuned sawtooth voices (they beat like a real reed) plus a
+   * square an octave down for body, all through a low-pass filter. The pitch starts a little sharp and
+   * settles, the sound is held at full level and then cut off quickly, with a puff of air at the start.
+   */
+  private blast(notes: number[], at: number, dur: number, vol: number, filterHz: number): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const t = ctx.currentTime + Math.max(0, at);
+    const end = t + dur;
+    const out = ctx.createGain();
+    out.gain.setValueAtTime(0.0001, t);
+    out.gain.linearRampToValueAtTime(1, t + 0.03);
+    out.gain.setValueAtTime(1, Math.max(t + 0.03, end - 0.09));
+    out.gain.exponentialRampToValueAtTime(0.0001, end + 0.05);
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(filterHz * 0.6, t);
+    lp.frequency.linearRampToValueAtTime(filterHz, t + 0.06);
+    lp.Q.value = 2.2;
+    lp.connect(out).connect(this.sfxBus);
+    const share = vol / Math.sqrt(notes.length);
+    for (const f of notes) {
+      for (const [type, mult, detune, v] of [
+        ['sawtooth', 1, -7, 1],
+        ['sawtooth', 1, 7, 1],
+        ['square', 0.5, 0, 0.45],
+      ] as const) {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = type;
+        o.detune.value = detune;
+        o.frequency.setValueAtTime(f * mult * 1.035, t);
+        o.frequency.exponentialRampToValueAtTime(f * mult, t + 0.07);
+        g.gain.value = share * v;
+        o.connect(g).connect(lp);
+        o.start(t);
+        o.stop(end + 0.1);
+      }
     }
+    this.noise(0.12, 0.05, 1800, at, 900);
   }
 
   /** Soft pneumatic bus brake hiss when coming to a full stop. */

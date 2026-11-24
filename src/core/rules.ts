@@ -221,12 +221,46 @@ export const MAX_FUEL = 100;
 /** The "low fuel" warning comes at this level. */
 export const LOW_FUEL = 25;
 
+/** What the engine is doing during a short moment of driving. */
+export interface FuelInput {
+  /** How long this moment lasted (s). */
+  dt: number;
+  /** Speed (px/s) and the real acceleration (px/s², negative when slowing down). */
+  v: number;
+  accel: number;
+  /** Is the gas pedal pressed? Without it the engine only idles or coasts. */
+  gas: boolean;
+  boosting?: boolean;
+  /** People on board: a heavier bus uses more petrol. */
+  passengers?: number;
+  /** A worn-out engine is thirstier. */
+  health?: number;
+}
+
+/** Petrol per second just for the engine running, and while coasting with the foot off the gas (the engine nearly shuts off). */
+const FUEL_IDLE = 0.17;
+const FUEL_COAST = 0.06;
+/** Petrol per second per px/s of speed (tyres, gears), per (px/s)³ (air: it grows fast), and per (px/s)·(px/s²) of speeding up. */
+const FUEL_ROLL = 0.00105;
+const FUEL_DRAG = 1.45e-8;
+const FUEL_PUSH = 9e-6;
+
 /**
- * Petrol used by a move of `dx` px taking `dt` seconds: more per px the faster we go,
- * a bit extra while pushing the gas, and a little just for idling (waiting at a light).
+ * Petrol used in a short moment, like a real engine (the numbers are scaled to the game):
+ * - standing with the engine on, or coasting without gas, costs almost nothing;
+ * - holding a speed costs more the faster it is, and the air makes it grow much faster than the speed
+ *   (so a fast bus burns far more per metre than a calm one, and crawling is wasteful too);
+ * - speeding up costs extra (the harder the push, the more), and braking throws that energy away;
+ * - nitro burns a lot, passengers add weight, and a worn-out engine is thirstier.
  */
-export function fuelUse(dx: number, dt: number, v: number, accelerating: boolean, boosting = false): number {
-  return (boosting ? NITRO.fuelFactor : 1) * Math.max(0, dx) * (0.0016 + 0.0000016 * Math.max(0, v)) + dt * (0.2 + (accelerating ? 0.5 : 0)) * (boosting ? NITRO.fuelFactor : 1);
+export function fuelUse(i: FuelInput): number {
+  if (i.dt <= 0) return 0;
+  const v = Math.max(0, i.v);
+  const mass = 1 + 0.012 * Math.min(Math.max(i.passengers ?? 0, 0), 14);
+  let perSecond = i.gas ? FUEL_IDLE + (FUEL_ROLL * v + FUEL_DRAG * v * v * v) * mass + FUEL_PUSH * Math.max(0, i.accel) * v * mass : v > 5 ? FUEL_COAST : FUEL_IDLE * 0.8;
+  if (i.boosting) perSecond *= NITRO.fuelFactor;
+  const wear = i.health === undefined ? 1 : 1 + (0.25 * Math.max(0, 60 - i.health)) / 60;
+  return perSecond * wear * i.dt;
 }
 
 /** With an empty tank the bus only crawls. */

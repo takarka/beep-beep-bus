@@ -9,6 +9,27 @@ const METAL = 0x4a4650;
 const GLASS = 0xbfe6f2;
 const SHELTER_H = 158;
 
+export interface Seat {
+  /** Centre of the seat. */
+  x: number;
+  /** World y of the seat surface (where a sitting person's hips rest). */
+  y: number;
+}
+
+/** Height of the bench seat above the ground. */
+const SEAT_H = 36;
+const SEAT_PITCH = 46;
+
+/** Places where people can sit on a bench drawn with `drawBench(g, x, feet, w)`. */
+export function benchSeats(x: number, feet: number, w: number): Seat[] {
+  const n = Math.max(1, Math.floor((w - 12) / SEAT_PITCH));
+  const start = x + w / 2 - ((n - 1) * SEAT_PITCH) / 2;
+  return Array.from({ length: n }, (_, i) => ({ x: start + i * SEAT_PITCH, y: feet - SEAT_H }));
+}
+
+/** The bench inside a shelter drawn with `drawShelter(g, x, feet, w, …)`. */
+export const shelterSeats = (x: number, feet: number, w: number): Seat[] => benchSeats(x + 22, feet - 6, w - 44);
+
 /** A park bench seen from the front: a back rest, a seat and two legs. `x` is the left end, `feet` the ground. */
 export function drawBench(g: G, x: number, feet: number, w: number): void {
   g.lineStyle(3, C.ink, 1);

@@ -13,18 +13,42 @@ function fuelForRoute(level: number): number {
   const lvl = generateLevel(level);
   const length = lvl.finishX - 470;
   const cruise = 250;
-  const driving = fuelUse(length, length / cruise, cruise, false);
-  const waiting = lvl.items.length * 4 * 0.2; // ~4 s idling at every light and stop
-  const accelerating = lvl.items.length * 3 * 0.5; // ~3 s of pushing the gas after every one
-  return driving + waiting + accelerating;
+  const driving = fuelUse({ dt: length / cruise, v: cruise, accel: 0, gas: true });
+  const waiting = lvl.items.length * fuelUse({ dt: 4, v: 0, accel: 0, gas: false }); // ~4 s idling at every light and stop
+  const starting = lvl.items.length * fuelUse({ dt: 2.5, v: 125, accel: 100, gas: true }); // speeding up again after each
+  const braking = lvl.items.length * fuelUse({ dt: 2, v: 125, accel: -120, gas: false });
+  return driving + waiting + starting + braking;
 }
 
+const GO = { dt: 1, accel: 0, gas: true } as const;
+
 describe('petrol', () => {
-  it('faster = more petrol per px, idling costs a little, accelerating more', () => {
-    expect(fuelUse(1000, 4, 250, false)).toBeLessThan(fuelUse(1000, 2, 500, false));
-    expect(fuelUse(0, 5, 0, false)).toBeGreaterThan(0);
-    expect(fuelUse(0, 5, 0, true)).toBeGreaterThan(fuelUse(0, 5, 0, false));
-    expect(fuelUse(-10, 0, 100, false)).toBe(0);
+  it('speed: a fast bus burns much more per metre than a calm one, and crawling is wasteful too', () => {
+    const perPx = (v: number) => fuelUse({ ...GO, v }) / v;
+    expect(perPx(500)).toBeGreaterThan(perPx(250) * 1.5);
+    expect(perPx(250)).toBeGreaterThan(perPx(150));
+    expect(perPx(40)).toBeGreaterThan(perPx(150));
+  });
+
+  it('standing and coasting cost almost nothing, speeding up and braking waste petrol', () => {
+    const stand = fuelUse({ dt: 5, v: 0, accel: 0, gas: false });
+    expect(stand).toBeGreaterThan(0);
+    expect(fuelUse({ dt: 5, v: 0, accel: 0, gas: true })).toBeGreaterThan(stand);
+    // coasting at speed is cheaper than holding the same speed on the gas
+    expect(fuelUse({ dt: 1, v: 250, accel: -20, gas: false })).toBeLessThan(fuelUse({ ...GO, v: 250 }) * 0.3);
+    // a hard push costs more than a gentle one
+    expect(fuelUse({ ...GO, v: 200, accel: 300 })).toBeGreaterThan(fuelUse({ ...GO, v: 200, accel: 80 }));
+    expect(fuelUse({ ...GO, v: 200, accel: 80 })).toBeGreaterThan(fuelUse({ ...GO, v: 200 }));
+    expect(fuelUse({ dt: 0, v: 100, accel: 0, gas: true })).toBe(0);
+  });
+
+  it('nitro, a full bus and a worn-out engine all use more', () => {
+    const base = fuelUse({ ...GO, v: 250 });
+    expect(fuelUse({ ...GO, v: 250, boosting: true })).toBeCloseTo(base * 1.8, 5);
+    expect(fuelUse({ ...GO, v: 250, passengers: 12 })).toBeGreaterThan(base);
+    expect(fuelUse({ ...GO, v: 250, passengers: 12 })).toBeLessThan(base * 1.2);
+    expect(fuelUse({ ...GO, v: 250, health: 20 })).toBeGreaterThan(base * 1.1);
+    expect(fuelUse({ ...GO, v: 250, health: 100 })).toBeCloseTo(base, 8);
   });
 
   it('an empty tank means a crawl', () => {
