@@ -25,6 +25,7 @@ import {
 } from '../core/rules';
 import { TrafficLightModel, type LightState } from '../core/traffic';
 import { t, type TextKey } from '../i18n';
+import { drawBench, drawShelter } from '../ui/stopShelter';
 import { Icons, drawChildrenSign, drawCrosswalkSign, drawMiniLight, drawPlaceIcon, drawRoadStopSign, drawStar, drawStopSign } from '../ui/draw';
 import { GROUND_Y, PASSENGER_VARIANTS, SIDEWALK_FEET_Y, STREET_Y } from '../ui/textures';
 import { BridgeView } from '../ui/bridge';
@@ -292,7 +293,7 @@ export class DriveScene extends Phaser.Scene {
     let stopIdx = 0;
     for (const item of this.level.items) {
       if (item.kind === 'light') this.createLight(item);
-      else this.createStop(item, ++stopIdx === stopsTotal);
+      else this.createStop(item, ++stopIdx === stopsTotal, env.time === 'night');
     }
     this.level.bumps.forEach((bx) => this.createBump(bx));
     this.level.crosswalks.forEach((cx) => this.createCrosswalk(cx));
@@ -523,7 +524,7 @@ export class DriveScene extends Phaser.Scene {
     sign.lineBetween(sx - 24, 578, sx + 24, 578);
   }
 
-  private createStop(data: StopData, last: boolean): void {
+  private createStop(data: StopData, last: boolean, night: boolean): void {
     const busLen = this.bus.lengthWorld();
     const x1 = data.zoneEnd;
     const x0 = x1 - busLen + 10;
@@ -546,6 +547,12 @@ export class DriveScene extends Phaser.Scene {
     sign.strokeRect(sx - 5, 470, 10, SIDEWALK_FEET_Y + 4 - 470);
     drawStopSign(sign, sx, 530, 30);
     drawPlaceIcon(sign, data.place, sx, 468, 25);
+
+    // A glass shelter with a bench inside, and one more bench beside it (behind the waiting people).
+    const shelterW = Math.min(260, Math.max(150, (x1 - x0) * 0.62));
+    const furniture = this.add.graphics().setDepth(19);
+    drawShelter(furniture, x0 + 22, SIDEWALK_FEET_Y, shelterW, night);
+    if (x1 - x0 - shelterW > 140) drawBench(furniture, x1 - 120, SIDEWALK_FEET_Y, 96);
 
     // Waiting passengers with animated waving arm and destination speech bubble
     const people: StopPerson[] = [];
