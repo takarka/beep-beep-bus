@@ -11,6 +11,8 @@ export interface Settings {
   voice: boolean;
   /** "Helper" mode: the bus brakes by itself at red lights and bus stops. */
   assist: boolean;
+  /** Crashes and hard bumps damage the bus. Off by default (gentler for the youngest players). */
+  damage: boolean;
   /** Season / day-night / weather chosen on the weather screen (or "auto"). */
   world: WorldSetting;
 }
@@ -27,6 +29,7 @@ function load(): Settings {
     music: raw?.music ?? true,
     voice: raw?.voice ?? true,
     assist: raw?.assist ?? false,
+    damage: raw?.damage ?? false,
     world: raw?.world ? sanitizeWorld(raw.world) : { ...DEFAULT_WORLD },
   };
 }

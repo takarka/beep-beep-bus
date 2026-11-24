@@ -1475,7 +1475,7 @@ export class DriveScene extends Phaser.Scene {
 
   /** Crashes and hard bumps wear the bus out: it looks battered, smokes, and drives slower. */
   private damageBus(amount: number): void {
-    if (amount <= 0) return;
+    if (amount <= 0 || !getSettings().damage) return;
     const before = this.health;
     this.health = Math.max(0, this.health - amount);
     const lost = Math.round(before - this.health);

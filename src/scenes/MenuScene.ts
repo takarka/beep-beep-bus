@@ -162,6 +162,18 @@ export class MenuScene extends Phaser.Scene {
         helper.setColor(on ? C.green : ASSIST_OFF);
       },
     });
+    // Damage on / off: with it off, crashes and bumps never hurt the bus.
+    const dmg: Button = new Button(this, 400, 650, {
+      r: 36,
+      color: getSettings().damage ? C.green : ASSIST_OFF,
+      icon: (g, s) => Icons.wrench(g, s),
+      onClick: () => {
+        const on = !getSettings().damage;
+        updateSettings({ damage: on });
+        dmg.setColor(on ? C.green : ASSIST_OFF);
+      },
+    });
+    label(this, 448, 650, t('damageOpt'), { size: 28, color: C.ink, stroke: C.cream, strokeThickness: 5 }).setOrigin(0, 0.5);
     label(this, 118, 650, t('assist'), { size: 28, color: C.ink, stroke: C.cream, strokeThickness: 5 }).setOrigin(0, 0.5);
   }
 
