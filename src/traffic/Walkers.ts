@@ -1,12 +1,12 @@
 import Phaser from 'phaser';
 import { GAME_W } from '../config';
 import { mulberry32, type Rng } from '../core/rng';
-import { PASSENGER_VARIANTS, STREET_Y } from '../ui/textures';
+import { PASSENGER_VARIANTS, STREET_Y, WALK_FRAMES } from '../ui/textures';
 
 /**
  * Townspeople walking along both pavements: grown-ups, children, pairs, some with a dog, some under an
  * umbrella in the rain. They only decorate the street (they never step on the road) and keep it alive.
- * Each one is shown from the side, walking in the direction they go, in a four-picture step cycle; a honk makes the people on the screen jump.
+ * Each one is shown from the side, walking in the direction they go, in a eight-picture walking cycle; a honk makes the people on the screen jump.
  */
 
 const NEAR_SCALE = 0.8;
@@ -112,13 +112,13 @@ export class Walkers {
         w.pause -= dt;
       } else {
         w.x += w.dir * w.speed * dt;
-        w.phase += (dt * w.speed) / (w.far ? 4.5 : 9);
+        w.phase += (dt * w.speed) / (w.far ? 3 : 6);
         if (this.rng() < dt * 0.04) w.pause = 0.8 + this.rng() * 1.8; // now and then somebody stops to look around
       }
       if (w.hop > 0) w.hop = Math.max(0, w.hop - dt / 0.35);
-      const frame = Math.floor(w.phase) % 4;
+      const frame = Math.floor(w.phase) % WALK_FRAMES;
       const standing = w.pause > 0;
-      const bob = standing ? 0 : (frame % 2 === 1 ? 2 : 0) * w.scale;
+      const bob = 0; // the pictures already rise and dip with each step
       const jump = Math.sin(Math.PI * (1 - w.hop)) * (w.hop > 0 ? 18 * w.scale : 0);
       // walking people are seen from the side, facing where they go; standing ones turn to look at the street
       w.img.setTexture(standing ? `pax${w.variant}` : `side${w.variant}_${frame}`);
@@ -126,7 +126,7 @@ export class Walkers {
       w.img.setPosition(w.x, w.feetY - bob - jump);
       w.img.setAngle(0);
       if (w.dog) {
-        w.dog.setTexture(standing || frame % 2 === 1 ? 'dogB' : 'dogA');
+        w.dog.setTexture(standing || Math.floor(frame / 2) % 2 === 1 ? 'dogB' : 'dogA');
         w.dog.setFlipX(w.dir < 0);
         w.dog.setPosition(w.x + w.dir * 52 * w.scale, w.feetY - (standing ? 0 : bob * 0.6));
       }

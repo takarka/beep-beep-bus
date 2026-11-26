@@ -321,85 +321,209 @@ function passengers(scene: Phaser.Scene): void {
   }
 }
 
+/** Frames in one walking cycle of the side-view people. */
+export const WALK_FRAMES = 8;
+
+type Pt = { x: number; y: number };
+
+/** A bent limb (two segments) with a dark outline and round ends, drawn as one piece so the joint is smooth. */
+function limb(g: Phaser.GameObjects.Graphics, pts: Pt[], w: number, color: number): void {
+  for (const [width, col] of [[w + 5, C.ink], [w, color]] as const) {
+    g.lineStyle(width, col, 1);
+    g.fillStyle(col, 1);
+    for (let k = 0; k + 1 < pts.length; k++) g.lineBetween(pts[k]!.x, pts[k]!.y, pts[k + 1]!.x, pts[k + 1]!.y);
+    for (const q of pts) g.fillCircle(q.x, q.y, width / 2);
+  }
+}
+
+const rad = (deg: number): number => (deg * Math.PI) / 180;
+/** The point `len` away from `from`, in the direction `deg` degrees from straight down (positive = forward, to the right). */
+const away = (from: Pt, deg: number, len: number): Pt => ({ x: from.x + Math.sin(rad(deg)) * len, y: from.y + Math.cos(rad(deg)) * len });
+
 /**
- * People seen from the side, walking to the right (the game flips them to walk left): four pictures of a step,
- * `side<variant>_<0..3>`: legs apart, passing (one leg lifted), legs apart the other way, passing. Feet at the bottom.
+ * People seen from the side, walking to the right (the game flips them to walk left): a proper walking cycle
+ * of `WALK_FRAMES` pictures, `side<variant>_<frame>`. Legs swing from the hip and bend at the knee, arms swing
+ * the other way and bend at the elbow, the lowest foot always stands on the ground so the body rises and
+ * dips like a real step. Each person has their own clothes (T-shirt, jacket, dress, rucksack) and hair.
  */
 function sidePeople(scene: Phaser.Scene): void {
   const rng = mulberry32(99);
   const shirts = [C.red, C.blue, C.green, C.orange, C.purple, 0xf15bb5, 0x2ec4b6, C.yellow];
   const skins = [0xf6d5b8, 0xe8b894, 0xc68e64, 0x8d5a3b];
   const hairs = [0x2d2a32, 0x6b3e26, 0xc58b3c, 0x9c4a2f, 0x8a8a8a];
+  const SHOES = [0xffffff, C.ink, 0xe63946, 0xf6d5b8];
   for (let i = 0; i < PASSENGER_VARIANTS; i++) {
     const pants = pick(rng, [0x3d405b, 0x2d2a32, 0x6d597a]); // the same trousers as the front view
     const kid = i % 3 === 2;
-    const s = kid ? 0.75 : 1;
+    const s = kid ? 0.78 : 1;
     const shirt = shirts[i % shirts.length]!;
     const skin = skins[i % skins.length]!;
-    const cx = 32;
-    const feet = 118;
-    const legH = 34 * s;
-    const bodyH = 42 * s;
-    const headR = 15 * s;
-    const hip = feet - legH;
-    // swing of each foot and how high it is lifted, per picture
-    const frames: Array<{ front: number; lift: number; liftRear: number }> = [
-      { front: 1, lift: 0, liftRear: 0 },
-      { front: 0, lift: 0, liftRear: 6 },
-      { front: -1, lift: 0, liftRear: 0 },
-      { front: 0, lift: 6, liftRear: 0 },
-    ];
-    frames.forEach((f, k) => {
+    const hair = hairs[i % hairs.length]!;
+    const outfit = i % 4; // 0 T-shirt, 1 jacket, 2 dress, 3 rucksack
+    const shoe = SHOES[i % SHOES.length]!;
+    const thigh = 17 * s;
+    const shin = 17 * s;
+    const torsoH = 38 * s;
+    const headR = 13 * s;
+
+    for (let k = 0; k < WALK_FRAMES; k++) {
       const g = make(scene);
-      const leg = (dx: number, lift: number, color: number): void => {
-        const fx = cx + dx * 15 * s;
-        const fy = feet - lift * s;
-        g.lineStyle(11 * s + 5, C.ink, 1);
-        g.lineBetween(cx, hip, fx, fy);
-        g.lineStyle(11 * s, color, 1);
-        g.lineBetween(cx, hip, fx, fy);
-        g.fillStyle(C.ink, 1); // shoe, pointing forward
-        g.fillRoundedRect(fx - 5 * s, fy - 4 * s, 15 * s, 7 * s, 3);
+      const phase = k / WALK_FRAMES;
+      // one leg's angles for a phase: the hip swings, the knee bends most as the leg swings through
+      const legAt = (p: number): { hip: number; knee: number } => ({
+        hip: 26 * Math.sin(2 * Math.PI * p),
+        knee: 6 + 54 * Math.pow(Math.max(0, Math.cos(2 * Math.PI * p)), 1.4),
+      });
+      const near = legAt(phase);
+      const far = legAt(phase + 0.5);
+      // joints relative to the hip at (0, 0): used to find how low each foot hangs
+      const jointsOf = (l: { hip: number; knee: number }): { knee: Pt; ankle: Pt } => {
+        const knee = away({ x: 0, y: 0 }, l.hip, thigh);
+        return { knee, ankle: away(knee, l.hip - l.knee, shin) };
       };
-      const arm = (dx: number, color: number): void => {
-        const sx = cx;
-        const sy = hip - bodyH + 12 * s;
-        g.lineStyle(8 * s + 4, C.ink, 1);
-        g.lineBetween(sx, sy, sx + dx * 12 * s, sy + 28 * s);
-        g.lineStyle(8 * s, color, 1);
-        g.lineBetween(sx, sy, sx + dx * 12 * s, sy + 28 * s);
+      const jn = jointsOf(near);
+      const jf = jointsOf(far);
+      const shoeH = 6 * s;
+      const hipY = 118 - shoeH - Math.max(jn.ankle.y, jf.ankle.y); // lowest foot on the ground
+      const hip: Pt = { x: 30, y: hipY };
+      const at = (q: Pt): Pt => ({ x: hip.x + q.x, y: hip.y + q.y });
+      const drawLeg = (j: { knee: Pt; ankle: Pt }, col: number, ang: number): void => {
+        limb(g, [at({ x: 0, y: 0 }), at(j.knee), at(j.ankle)], 11 * s, col);
+        // the shoe points forward and follows the shin a little
+        const a = at(j.ankle);
+        g.fillStyle(shoe, 1);
+        g.lineStyle(3, C.ink, 1);
+        g.fillRoundedRect(a.x - 4 * s, a.y - 1, 15 * s, shoeH, 3);
+        g.strokeRoundedRect(a.x - 4 * s, a.y - 1, 15 * s, shoeH, 3);
+        void ang;
       };
-      const dark = shade(shirt, -0.15);
-      // the far leg and arm first, then the body, then the near leg and arm
-      leg(-f.front * 0.9, f.liftRear, shade(pants, -0.2));
-      arm(f.front, shade(dark, -0.15));
-      g.lineStyle(3, C.ink, 1);
+
+      // torso (a slight forward lean), shoulders at the top
+      const lean = 4;
+      const top = away(hip, -lean, -torsoH); // straight up, leaning forward
+      const shoulder: Pt = { x: top.x, y: top.y + 6 * s };
+      const armAt = (p: number): { up: Pt; hand: Pt } => {
+        const swing = -24 * Math.sin(2 * Math.PI * p);
+        const flex = 8 + 22 * Math.max(0, swing / 24);
+        const elbow = away(shoulder, swing, 15 * s);
+        const hand = away(elbow, swing + flex, 14 * s);
+        return { up: elbow, hand };
+      };
+      const drawArm = (pp: number, col: number): void => {
+        const a = armAt(pp);
+        limb(g, [shoulder, a.up, a.hand], 7 * s, col);
+        g.fillStyle(skin, 1);
+        g.lineStyle(2.5, C.ink, 1);
+        g.fillCircle(a.hand.x, a.hand.y + 1, 4.2 * s);
+        g.strokeCircle(a.hand.x, a.hand.y + 1, 4.2 * s);
+      };
+      const sleeve = outfit === 1 ? shade(shirt, -0.2) : shirt;
+
+      // the far side first (leg, arm), then the rucksack, the body, the near side, the head
+      drawLeg(jf, shade(outfit === 2 ? skin : pants, -0.2), far.hip);
+      drawArm(phase + 0.5, shade(sleeve, -0.2));
+      if (outfit === 3) {
+        g.fillStyle(shade(shirt, 0.0) === C.blue ? C.orange : C.blue, 1);
+        g.lineStyle(3, C.ink, 1);
+        g.fillRoundedRect(top.x - 22 * s, top.y + 6 * s, 14 * s, 26 * s, 6);
+        g.strokeRoundedRect(top.x - 22 * s, top.y + 6 * s, 14 * s, 26 * s, 6);
+      }
+      // trunk: a rounded shape wider at the shoulders; a dress flares to the knee, a jacket hangs lower
+      const wst = 12 * s;
+      const bottomY = hip.y + (outfit === 1 ? 5 * s : 0);
       g.fillStyle(shirt, 1);
-      const bodyTop = hip - bodyH + 4;
-      g.fillRoundedRect(cx - 13 * s, bodyTop, 26 * s, bodyH, { tl: 11 * s, tr: 11 * s, bl: 4, br: 4 });
-      g.strokeRoundedRect(cx - 13 * s, bodyTop, 26 * s, bodyH, { tl: 11 * s, tr: 11 * s, bl: 4, br: 4 });
-      leg(f.front * 0.9, f.lift, pants);
-      arm(-f.front, dark);
-      // head in profile: a nose, an eye, hair at the back and on top, a cap for some
-      const hy = bodyTop - headR + 2;
       g.lineStyle(3, C.ink, 1);
+      g.fillRoundedRect(Math.min(top.x, hip.x) - wst, top.y, wst * 2 + Math.abs(top.x - hip.x), bottomY - top.y, { tl: 11 * s, tr: 11 * s, bl: 5, br: 5 });
+      g.strokeRoundedRect(Math.min(top.x, hip.x) - wst, top.y, wst * 2 + Math.abs(top.x - hip.x), bottomY - top.y, { tl: 11 * s, tr: 11 * s, bl: 5, br: 5 });
+      if (outfit === 2) {
+        const sw = Math.sin(rad(near.hip)) * 4;
+        g.fillPoints(
+          [
+            new Phaser.Math.Vector2(hip.x - wst, hip.y - 6 * s),
+            new Phaser.Math.Vector2(hip.x + wst, hip.y - 6 * s),
+            new Phaser.Math.Vector2(hip.x + wst + 6 * s + sw, hip.y + 15 * s),
+            new Phaser.Math.Vector2(hip.x - wst - 6 * s + sw, hip.y + 15 * s),
+          ],
+          true,
+        );
+        g.strokePoints(
+          [
+            new Phaser.Math.Vector2(hip.x - wst, hip.y - 6 * s),
+            new Phaser.Math.Vector2(hip.x + wst, hip.y - 6 * s),
+            new Phaser.Math.Vector2(hip.x + wst + 6 * s + sw, hip.y + 15 * s),
+            new Phaser.Math.Vector2(hip.x - wst - 6 * s + sw, hip.y + 15 * s),
+          ],
+          true,
+          true,
+        );
+        g.fillStyle(shade(shirt, 0.3), 1);
+        g.fillRect(hip.x - wst + 1, hip.y - 8 * s, wst * 2 - 2, 4 * s); // belt
+      } else if (outfit === 1) {
+        g.lineStyle(2.5, C.ink, 0.7);
+        g.lineBetween(top.x + 6 * s, top.y + 2, hip.x + 6 * s, bottomY - 2); // zip
+        g.fillStyle(shade(shirt, -0.3), 1);
+        g.fillRect(top.x - 5 * s, top.y - 2, 12 * s, 6 * s); // collar
+      } else {
+        g.fillStyle(shade(pants, 0.1), 1);
+        g.fillRect(hip.x - wst + 2, hip.y - 7 * s, wst * 2 + 1, 5 * s); // belt of the trousers
+      }
+      drawLeg(jn, outfit === 2 ? skin : pants, near.hip);
+      drawArm(phase, sleeve);
+
+      // neck and head in profile
+      const hx = top.x + 2;
+      const hy = top.y - headR + 2 * s;
       g.fillStyle(skin, 1);
-      g.fillCircle(cx + 1, hy, headR);
-      g.strokeCircle(cx + 1, hy, headR);
-      g.fillCircle(cx + headR + 1, hy + 3, 3.5 * s);
-      g.fillStyle(i % 4 === 1 ? C.red : hairs[i % hairs.length]!, 1);
-      g.slice(cx - 1, hy - 1, headR + 1, Math.PI * 0.85, Math.PI * 2.05, false);
-      g.fillPath();
-      if (i % 4 === 1) g.fillRect(cx + 4, hy - 5, headR + 8, 5); // the peak of the cap
+      g.lineStyle(3, C.ink, 1);
+      g.fillRect(hx - 4 * s, top.y - 6 * s, 8 * s, 9 * s);
+      // hair behind the head (long hair, ponytail, bun) goes first
+      const style = i % 8;
+      g.fillStyle(hair, 1);
+      if (style === 2) g.fillRoundedRect(hx - headR - 4 * s, hy - headR * 0.6, headR * 1.2, headR * 2.6, 8 * s); // long hair
+      if (style === 3) {
+        g.fillRoundedRect(hx - headR - 9 * s, hy - 2 * s, 12 * s, 7 * s, 4); // ponytail
+        g.strokeRoundedRect(hx - headR - 9 * s, hy - 2 * s, 12 * s, 7 * s, 4);
+      }
+      if (style === 7) g.fillCircle(hx - headR * 0.8, hy - headR * 0.9, 6 * s); // bun
+      g.fillStyle(skin, 1);
+      g.fillCircle(hx, hy, headR);
+      g.strokeCircle(hx, hy, headR);
+      g.fillCircle(hx + headR - 1, hy + 3 * s, 3.4 * s); // nose
+      g.strokeCircle(hx + headR - 1, hy + 3 * s, 3.4 * s);
+      g.fillStyle(shade(skin, -0.12), 1); // ear
+      g.fillCircle(hx - 3 * s, hy + 2 * s, 3.4 * s);
+      // hair on top, or a cap
+      if (style === 1 || style === 6) {
+        const cap = style === 1 ? C.red : C.blue;
+        g.fillStyle(cap, 1);
+        g.slice(hx, hy - 1, headR + 1.5, Math.PI * 1.0, Math.PI * 2.0, false);
+        g.fillPath();
+        g.fillRoundedRect(hx + 2, hy - 6 * s, headR + 9, 5, 2); // the peak
+        g.strokeRoundedRect(hx + 2, hy - 6 * s, headR + 9, 5, 2);
+      } else if (style === 4) {
+        g.fillStyle(hair, 1);
+        for (const [dx, dy] of [[-8, -8], [-1, -13], [7, -9], [-12, -1]] as const) g.fillCircle(hx + dx * s, hy + dy * s, 7 * s); // curls
+      } else {
+        g.fillStyle(hair, 1);
+        g.slice(hx - 1, hy - 1, headR + 1.5, Math.PI * 0.9, Math.PI * 2.0, false);
+        g.fillPath();
+        g.fillRect(hx - headR - 1, hy - 3 * s, 5 * s, 7 * s); // sideburn at the back
+      }
+      // face: an eye with a bright spot, a small mouth, a rosy cheek
       g.fillStyle(C.ink, 1);
-      g.fillCircle(cx + 7 * s, hy + 1, 2.2);
+      g.fillEllipse(hx + 6 * s, hy + 1 * s, 3.6, 5);
+      g.fillStyle(0xffffff, 1);
+      g.fillCircle(hx + 6.8 * s, hy - 0.4 * s, 0.9);
       g.lineStyle(2, C.ink, 1);
       g.beginPath();
-      g.arc(cx + 5 * s, hy + 5, 4 * s, 0.4, 1.9);
+      g.arc(hx + 5 * s, hy + 6 * s, 3.5 * s, 0.35, 1.6);
       g.strokePath();
+      g.fillStyle(0xf28482, 0.55);
+      g.fillCircle(hx + 3 * s, hy + 6 * s, 2.8 * s);
+
       g.generateTexture(`side${i}_${k}`, 64, 120);
       g.destroy();
-    });
+    }
   }
 }
 
