@@ -264,11 +264,18 @@ interface Look {
   /** A child (smaller). */
   kid?: boolean;
   /** 0 T-shirt and trousers, 1 jacket, 2 dress, 3 rucksack. */
-  outfit: 0 | 1 | 2 | 3;
+  outfit: 0 | 1 | 2 | 3 | 4;
   /** Colour of the top (otherwise one from the shirt palette). */
   cloth?: number;
   /** Colour of the legs under a dress (otherwise bare skin). */
   legs?: number;
+  /** Outfit 4, a village grandmother: a long skirt, an apron over it, and boots. */
+  skirt?: number;
+  apron?: number;
+  boots?: number;
+  /** Several colours for the dots (flowers) on the kerchief, and a big triangle of it falling on the chest. */
+  dots?: number[];
+  drape?: boolean;
 }
 const SKIN_A = 0xf1cfa8;
 const SKIN_B = 0xe6b98c;
@@ -284,7 +291,7 @@ export const LOOKS: readonly Look[] = [
   { skin: SKIN_A, hair: BLACK, style: 'short', hat: 'beanie', hatColor: C.blue, kid: true, outfit: 1 }, // 5 a boy in a knitted hat
   { skin: SKIN_B, hair: DARK_BROWN, style: 'short', hat: 'kerchief', hatColor: 0xe76f51, outfit: 2 }, // 6 a woman in a kerchief
   { skin: SKIN_C, hair: 0x8a8a92, style: 'bun', hat: 'none', hatColor: 0, glasses: true, outfit: 2, cloth: 0x6f9a9c, legs: 0x8d7b6c }, // 7 a grandmother in a dress
-  { skin: SKIN_B, hair: 0x8a8a92, style: 'short', hat: 'kerchief', hatColor: 0xf48fb8, glasses: true, outfit: 2, cloth: 0x7aa7d6, legs: 0x8d7b6c }, // 8 a grandmother in a pink kerchief and a dress, like Masha's
+  { skin: SKIN_B, hair: 0xc4c4cc, style: 'short', hat: 'kerchief', hatColor: 0xd23b2a, dots: [0xffd23f, 0x57cc99, 0x3a86ff, 0xf4a261], drape: true, glasses: true, outfit: 4, cloth: 0x8a5a3b, skirt: 0x6a4328, apron: 0xd9c29a, legs: 0x5b4636, boots: 0x3b3b3f }, // 8 a village grandmother: red flowery kerchief, brown cardigan, apron, long skirt, boots
 ];
 
 /** Is this person a child (drawn smaller)? */
@@ -349,6 +356,12 @@ function drawHat(g: G, look: Look, hx: number, hy: number, R: number, s: number,
     g.strokePath();
     g.lineStyle(2.5, edge, 1);
     g.lineBetween(hx - R - 1, hy - 1, hx + R + 1, hy - 1); // the hem across the brow
+    // a little hair shows under the hem at the front, parted in the middle
+    if (!side) {
+      g.fillStyle(look.hair, 1);
+      g.fillTriangle(hx - R * 0.9, hy - 1, hx, hy - 1, hx - R * 0.5, hy + R * 0.18);
+      g.fillTriangle(hx + R * 0.9, hy - 1, hx, hy - 1, hx + R * 0.5, hy + R * 0.18);
+    }
     g.lineStyle(3, C.ink, 1);
     if (side) {
       // cloth falling behind the head, a band under the cheek and the knot under the chin
@@ -361,11 +374,23 @@ function drawHat(g: G, look: Look, hx: number, hy: number, R: number, s: number,
       g.lineBetween(hx - R * 0.8, hy + R * 0.85, hx + R * 0.15, hy + R * 1.15);
       g.lineStyle(3, C.ink, 1);
       g.fillStyle(col, 1);
+      if (look.drape) {
+        g.fillStyle(col, 1);
+        g.fillTriangle(hx - R * 0.1, hy + R * 1.2, hx + R * 1.2, hy + R * 1.35, hx + R * 0.45, hy + R * 2.2);
+        g.strokeTriangle(hx - R * 0.1, hy + R * 1.2, hx + R * 1.2, hy + R * 1.35, hx + R * 0.45, hy + R * 2.2);
+        (look.dots ?? []).forEach((c, k) => {
+          g.fillStyle(c, 0.9);
+          g.fillCircle(hx + R * (0.3 + (k % 2) * 0.3), hy + R * (1.5 + k * 0.14), 1.7 * s);
+        });
+      }
+      g.fillStyle(col, 1);
       g.fillTriangle(hx + R * 0.15, hy + R * 1.18, hx - 2 * s, hy + R * 1.6, hx + 4 * s, hy + R * 1.58);
       g.fillCircle(hx + R * 0.15, hy + R * 1.15, 3.4 * s);
       g.strokeCircle(hx + R * 0.15, hy + R * 1.15, 3.4 * s);
-      g.fillStyle(dot, 0.85);
-      for (const [dx, dy] of [[-0.55, -0.75], [-0.1, -1.05], [0.35, -0.8], [-0.95, 0.1], [-0.9, 0.7]] as const) g.fillCircle(hx + dx * R, hy + dy * R, 2 * s);
+      [[-0.55, -0.75], [-0.1, -1.05], [0.35, -0.8], [-0.95, 0.1], [-0.9, 0.7]].forEach(([dx, dy], k) => {
+        g.fillStyle(look.dots ? look.dots[k % look.dots.length]! : dot, 0.9);
+        g.fillCircle(hx + dx! * R, hy + dy! * R, 2 * s);
+      });
     } else {
       // cloth along each cheek, a band under the chin, and the knot with two tails
       g.fillStyle(col, 1);
@@ -382,12 +407,25 @@ function drawHat(g: G, look: Look, hx: number, hy: number, R: number, s: number,
       g.lineBetween(chin[1]![0], chin[1]![1], chin[2]![0], chin[2]![1]);
       g.lineStyle(3, C.ink, 1);
       g.fillStyle(col, 1);
+      if (look.drape) {
+        // the big corner of the kerchief lies on the chest
+        g.fillStyle(col, 1);
+        g.fillTriangle(hx - R * 0.8, hy + R * 1.15, hx + R * 1.1, hy + R * 1.2, hx + R * 0.15, hy + R * 2.25);
+        g.strokeTriangle(hx - R * 0.8, hy + R * 1.15, hx + R * 1.1, hy + R * 1.2, hx + R * 0.15, hy + R * 2.25);
+        (look.dots ?? []).forEach((c, k) => {
+          g.fillStyle(c, 0.9);
+          g.fillCircle(hx - R * 0.2 + (k % 2) * R * 0.5, hy + R * (1.45 + k * 0.17), 1.8 * s);
+        });
+      }
+      g.fillStyle(col, 1);
       g.fillTriangle(hx, hy + R * 1.14, hx - 8 * s, hy + R * 1.6, hx - 1.5 * s, hy + R * 1.62);
       g.fillTriangle(hx, hy + R * 1.14, hx + 8 * s, hy + R * 1.6, hx + 1.5 * s, hy + R * 1.62);
       g.fillCircle(hx, hy + R * 1.14, 3.6 * s);
       g.strokeCircle(hx, hy + R * 1.14, 3.6 * s);
-      g.fillStyle(dot, 0.85);
-      for (const [dx, dy] of [[-0.6, -0.7], [0, -1.0], [0.6, -0.7], [-1.18, 0.3], [1.1, 0.3]] as const) g.fillCircle(hx + dx * R, hy + dy * R, 1.7 * s);
+      [[-0.6, -0.7], [0, -1.0], [0.6, -0.7], [-1.18, 0.3], [1.1, 0.3]].forEach(([dx, dy], k) => {
+        g.fillStyle(look.dots ? look.dots[k % look.dots.length]! : dot, 0.9);
+        g.fillCircle(hx + dx! * R, hy + dy! * R, 1.7 * s);
+      });
     }
   } else if (look.hat === 'beanie') {
     // a knitted winter hat with a ribbed edge, a stripe and a pompom
@@ -577,7 +615,7 @@ function passengers(scene: Phaser.Scene): void {
     g.lineStyle(3, C.ink, 1);
     // legs: standing, or sitting (thighs forward along the seat, shins down)
     const hip = seated ? SIT_HIP * s : legH;
-    g.fillStyle(pants, 1);
+    g.fillStyle(look.outfit === 4 ? look.boots ?? 0x3b3b3f : pants, 1);
     if (seated) {
       g.fillRoundedRect(cx - 12 * s, feet - hip - 2, 36 * s, 12 * s, 4);
       g.strokeRoundedRect(cx - 12 * s, feet - hip - 2, 36 * s, 12 * s, 4);
@@ -593,12 +631,26 @@ function passengers(scene: Phaser.Scene): void {
     const bodyTop = feet - hip - bodyH + 4;
     g.fillRoundedRect(cx - 16 * s, bodyTop, 32 * s, bodyH, { tl: 12 * s, tr: 12 * s, bl: 4, br: 4 });
     g.strokeRoundedRect(cx - 16 * s, bodyTop, 32 * s, bodyH, { tl: 12 * s, tr: 12 * s, bl: 4, br: 4 });
-    if (look.outfit === 2) {
-      // a dress: a skirt flaring over the legs (down to the knee, or over the lap when sitting)
-      const sk = seated ? 10 * s : 22 * s;
-      g.fillStyle(shirt, 1);
+    if (look.outfit === 2 || look.outfit === 4) {
+      // a dress: a skirt flaring over the legs (down to the knee, or over the lap when sitting; a grandmother's reaches the boots)
+      const sk = seated ? 12 * s : look.outfit === 4 ? 30 * s : 22 * s;
+      g.fillStyle(look.outfit === 4 ? look.skirt ?? shirt : shirt, 1);
       g.fillPoints([new Phaser.Math.Vector2(cx - 15 * s, feet - hip - 4), new Phaser.Math.Vector2(cx + 15 * s, feet - hip - 4), new Phaser.Math.Vector2(cx + 20 * s, feet - hip + sk), new Phaser.Math.Vector2(cx - 20 * s, feet - hip + sk)], true);
       g.strokePoints([new Phaser.Math.Vector2(cx - 15 * s, feet - hip - 4), new Phaser.Math.Vector2(cx + 15 * s, feet - hip - 4), new Phaser.Math.Vector2(cx + 20 * s, feet - hip + sk), new Phaser.Math.Vector2(cx - 20 * s, feet - hip + sk)], true, true);
+    }
+    if (look.outfit === 4) {
+      // knitted cardigan: little diamonds and buttons; an apron with a pocket over the skirt
+      g.fillStyle(shade(shirt, 0.25), 0.8);
+      for (const [dx, dy] of [[-8, 6], [8, 6], [-8, 18], [8, 18]] as const) g.fillTriangle(cx + dx * s, bodyTop + (dy - 4) * s, cx + (dx + 3) * s, bodyTop + dy * s, cx + (dx - 3) * s, bodyTop + dy * s);
+      g.fillStyle(C.ink, 1);
+      for (const dy of [10, 20, 30]) g.fillCircle(cx, bodyTop + dy * s, 1.6 * s);
+      const ay = feet - hip - 2;
+      const bottom = feet - hip + (seated ? 12 * s : 28 * s);
+      g.fillStyle(look.apron ?? 0xd9c29a, 1);
+      g.lineStyle(2.5, C.ink, 1);
+      g.fillPoints([new Phaser.Math.Vector2(cx - 11 * s, ay), new Phaser.Math.Vector2(cx + 11 * s, ay), new Phaser.Math.Vector2(cx + 15 * s, bottom), new Phaser.Math.Vector2(cx - 15 * s, bottom)], true);
+      g.strokePoints([new Phaser.Math.Vector2(cx - 11 * s, ay), new Phaser.Math.Vector2(cx + 11 * s, ay), new Phaser.Math.Vector2(cx + 15 * s, bottom), new Phaser.Math.Vector2(cx - 15 * s, bottom)], true, true);
+      g.strokeRoundedRect(cx - 7 * s, ay + 6 * s, 11 * s, 9 * s, 2);
     }
     // arms
     g.fillStyle(shade(shirt, -0.15), 1);
@@ -651,7 +703,7 @@ function sidePeople(scene: Phaser.Scene): void {
     const skin = LOOKS[i % LOOKS.length]!.skin;
     const outfit = look.outfit;
     const legSkin = look.legs ?? skin; // bare legs, or tights
-    const shoe = SHOES[i % SHOES.length]!;
+    const shoe = look.boots ?? SHOES[i % SHOES.length]!;
     const thigh = 17 * s;
     const shin = 17 * s;
     const torsoH = 38 * s;
@@ -711,7 +763,7 @@ function sidePeople(scene: Phaser.Scene): void {
       const sleeve = outfit === 1 ? shade(shirt, -0.2) : shirt;
 
       // the far side first (leg, arm), then the rucksack, the body, the near side, the head
-      drawLeg(jf, shade(outfit === 2 ? legSkin : pants, -0.2), far.hip);
+      drawLeg(jf, shade(outfit === 2 || outfit === 4 ? legSkin : pants, -0.2), far.hip);
       drawArm(phase + 0.5, shade(sleeve, -0.2));
       if (outfit === 3) {
         g.fillStyle(shade(shirt, 0.0) === C.blue ? C.orange : C.blue, 1);
@@ -726,14 +778,16 @@ function sidePeople(scene: Phaser.Scene): void {
       g.lineStyle(3, C.ink, 1);
       g.fillRoundedRect(Math.min(top.x, hip.x) - wst, top.y, wst * 2 + Math.abs(top.x - hip.x), bottomY - top.y, { tl: 11 * s, tr: 11 * s, bl: 5, br: 5 });
       g.strokeRoundedRect(Math.min(top.x, hip.x) - wst, top.y, wst * 2 + Math.abs(top.x - hip.x), bottomY - top.y, { tl: 11 * s, tr: 11 * s, bl: 5, br: 5 });
-      if (outfit === 2) {
+      if (outfit === 2 || outfit === 4) {
         const sw = Math.sin(rad(near.hip)) * 4;
+        const len = outfit === 4 ? 27 * s : 15 * s;
+        g.fillStyle(outfit === 4 ? look.skirt ?? shirt : shirt, 1);
         g.fillPoints(
           [
             new Phaser.Math.Vector2(hip.x - wst, hip.y - 6 * s),
             new Phaser.Math.Vector2(hip.x + wst, hip.y - 6 * s),
-            new Phaser.Math.Vector2(hip.x + wst + 6 * s + sw, hip.y + 15 * s),
-            new Phaser.Math.Vector2(hip.x - wst - 6 * s + sw, hip.y + 15 * s),
+            new Phaser.Math.Vector2(hip.x + wst + 6 * s + sw, hip.y + len),
+            new Phaser.Math.Vector2(hip.x - wst - 6 * s + sw, hip.y + len),
           ],
           true,
         );
@@ -741,14 +795,26 @@ function sidePeople(scene: Phaser.Scene): void {
           [
             new Phaser.Math.Vector2(hip.x - wst, hip.y - 6 * s),
             new Phaser.Math.Vector2(hip.x + wst, hip.y - 6 * s),
-            new Phaser.Math.Vector2(hip.x + wst + 6 * s + sw, hip.y + 15 * s),
-            new Phaser.Math.Vector2(hip.x - wst - 6 * s + sw, hip.y + 15 * s),
+            new Phaser.Math.Vector2(hip.x + wst + 6 * s + sw, hip.y + len),
+            new Phaser.Math.Vector2(hip.x - wst - 6 * s + sw, hip.y + len),
           ],
           true,
           true,
         );
-        g.fillStyle(shade(shirt, 0.3), 1);
-        g.fillRect(hip.x - wst + 1, hip.y - 8 * s, wst * 2 - 2, 4 * s); // belt
+        if (outfit === 4) {
+          // cardigan buttons and an apron with a pocket on the front of the skirt
+          g.fillStyle(C.ink, 1);
+          for (const dy of [12, 22, 32]) g.fillCircle(top.x + 6 * s, top.y + dy * s, 1.5 * s);
+          g.fillStyle(look.apron ?? 0xd9c29a, 1);
+          g.lineStyle(2.5, C.ink, 1);
+          const ap = [new Phaser.Math.Vector2(hip.x - 1 * s, hip.y - 6 * s), new Phaser.Math.Vector2(hip.x + wst + 1, hip.y - 6 * s), new Phaser.Math.Vector2(hip.x + wst + 6 * s + sw, hip.y + len - 1), new Phaser.Math.Vector2(hip.x - 2 * s + sw, hip.y + len - 1)];
+          g.fillPoints(ap, true);
+          g.strokePoints(ap, true, true);
+          g.strokeRoundedRect(hip.x + 3 * s, hip.y + 1 * s, 7 * s, 7 * s, 2);
+        } else {
+          g.fillStyle(shade(shirt, 0.3), 1);
+          g.fillRect(hip.x - wst + 1, hip.y - 8 * s, wst * 2 - 2, 4 * s); // belt
+        }
       } else if (outfit === 1) {
         g.lineStyle(2.5, C.ink, 0.7);
         g.lineBetween(top.x + 6 * s, top.y + 2, hip.x + 6 * s, bottomY - 2); // zip
@@ -758,7 +824,7 @@ function sidePeople(scene: Phaser.Scene): void {
         g.fillStyle(shade(pants, 0.1), 1);
         g.fillRect(hip.x - wst + 2, hip.y - 7 * s, wst * 2 + 1, 5 * s); // belt of the trousers
       }
-      drawLeg(jn, outfit === 2 ? legSkin : pants, near.hip);
+      drawLeg(jn, outfit === 2 || outfit === 4 ? legSkin : pants, near.hip);
       drawArm(phase, sleeve);
 
       // neck and head in profile
