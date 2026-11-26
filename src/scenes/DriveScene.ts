@@ -35,7 +35,7 @@ import { drawLandmark } from '../ui/landmarks';
 import { drawLandmarkBig } from '../ui/landmarkScenes';
 import { Walkers } from '../traffic/Walkers';
 import { TrafficManager } from '../traffic/TrafficManager';
-import { BUMP, CHILDREN, LOW_FUEL, MAX_FUEL, MAX_HEALTH, NITRO, bumpDamage, bumpResult, childrenZoneResult, conditionOf, crashDamage, fuelPerformance, fuelUse, nitroStep, performanceFor } from '../core/rules';
+import { BUMP, CHILDREN, LOW_FUEL, MAX_FUEL, MAX_HEALTH, NITRO, bumpDamage, bumpResult, childrenZoneResult, conditionOf, crashDamage, fuelPerformance, fuelUse, nitroStep, performanceFor, REVERSE } from '../core/rules';
 import { LaneTraffic, type LaneCrash } from '../traffic/LaneTraffic';
 import { Crossing, depthForY } from '../traffic/Crossing';
 import { createLaneMotion, startLaneChange, stepLaneChange, type LaneIndex, type LaneMotion } from '../traffic/lanes';
@@ -67,6 +67,8 @@ interface StopRt {
   announced: boolean;
   waving?: boolean;
   laneHinted?: boolean;
+  /** The arrow was shown again after the stop was missed (we can back up to it). */
+  retryHinted?: boolean;
   last: boolean;
 }
 
@@ -165,6 +167,14 @@ export class DriveScene extends Phaser.Scene {
   private stations: StationRt[] = [];
   private stillTimeSt = 0;
   private fuelPrevV = 0;
+  /** Reverse gear: the pedal drives backwards. `vr` is the speed backwards (px/s, ≥ 0), `v` stays the forward speed. */
+  private reverseMode = false;
+  private vr = 0;
+  private beepT = 0;
+  private reverseBtn!: Button;
+  private reverseHinted = false;
+  /** Where the bus is on the screen (its centre, px): it moves forward when we speed up and back when we brake or reverse. */
+  private leadNow = 360;
   /** Nitro: a short burst of speed. */
   private nitro: number = NITRO.max;
   private nitroLocked = false;
@@ -245,6 +255,10 @@ export class DriveScene extends Phaser.Scene {
     this.stations = [];
     this.stillTimeSt = 0;
     this.fuelPrevV = 0;
+    this.reverseMode = false;
+    this.vr = 0;
+    this.beepT = 0;
+    this.reverseHinted = false;
     this.nitro = NITRO.max;
     this.nitroLocked = false;
     this.boosting = false;
@@ -271,6 +285,7 @@ export class DriveScene extends Phaser.Scene {
     this.bus = new BusView(this, START_X, GROUND_Y, design);
     this.bus.setScale(DRIVE_SCALE[design.body]).setDepth(10);
     this.camLead = 140 + this.bus.lengthWorld() / 2;
+    this.leadNow = this.camLead;
     this.bus.setNight(env.time === 'night');
     this.bus.setWipers(env.precip);
     this.bus.setDamage(1 - this.health / MAX_HEALTH);
@@ -803,6 +818,10 @@ export class DriveScene extends Phaser.Scene {
     });
     this.laneBtn.setScrollFactor(0, 0, true).setDepth(95);
 
+    // Reverse gear: the pedal drives backwards while it is on (only possible when stopped)
+    this.reverseBtn = new Button(this, 324, GAME_H - 84, { r: 44, color: 0xb9b0a0, text: 'R', textSize: 40, onClick: () => this.toggleReverse() });
+    this.reverseBtn.setScrollFactor(0, 0, true).setDepth(95);
+
     // Nitro: hold it for a burst of speed
     this.nitroBtn = new HoldButton(this, GAME_W - 292 - 112, GAME_H - 84, 44, C.orange, (g, s) => Icons.flame(g, s));
     this.nitroBtn.setScrollFactor(0, 0, true).setDepth(95);
@@ -816,6 +835,7 @@ export class DriveScene extends Phaser.Scene {
       kb.on('keydown-ESC', () => this.setPaused(!this.paused));
       kb.on('keydown-P', () => this.setPaused(!this.paused));
       kb.on('keydown-H', () => this.honk());
+      kb.on('keydown-R', () => this.toggleReverse());
       kb.on('keydown-SPACE', () => this.honk());
       kb.on('keydown-UP', () => this.requestLane(1));
       kb.on('keydown-W', () => this.requestLane(1));
@@ -845,6 +865,20 @@ export class DriveScene extends Phaser.Scene {
 
   private refreshLaneBtn(): void {
     this.laneBtn.setIcon((g, s) => Icons.laneChange(g, s, this.busLane.lane === 0));
+  }
+
+  /** Reverse gear on / off. It can only be changed when the bus has stopped. */
+  private toggleReverse(): void {
+    if (this.paused || this.phase !== 'driving') return;
+    if (this.v > 4 || this.vr > 4) {
+      this.showBanner(t('stopFirst'), C.orange, 1100);
+      return;
+    }
+    this.reverseMode = !this.reverseMode;
+    this.reverseBtn.setColor(this.reverseMode ? C.yellow : 0xb9b0a0);
+    this.bus.setReverse(this.reverseMode);
+    audio.select();
+    if (this.reverseMode) this.showBanner(t('reverse'), C.yellow, 1000);
   }
 
   private honk(): void {
@@ -1258,9 +1292,10 @@ export class DriveScene extends Phaser.Scene {
   private useFuel(dt: number, accelerating: boolean, boosting = false): void {
     if (!this.fuelActive || this.phase === 'finishing') return;
     const before = Math.round(this.fuel);
-    const accel = dt > 0 ? (this.v - this.fuelPrevV) / dt : 0;
-    this.fuelPrevV = this.v;
-    this.fuel = Math.max(0, this.fuel - fuelUse({ dt, v: this.v, accel, gas: accelerating, boosting, passengers: this.aboard, health: this.health }));
+    const sp = Math.max(this.v, this.vr);
+    const accel = dt > 0 ? (sp - this.fuelPrevV) / dt : 0;
+    this.fuelPrevV = sp;
+    this.fuel = Math.max(0, this.fuel - fuelUse({ dt, v: sp, accel, gas: accelerating, boosting, passengers: this.aboard, health: this.health }));
     if (Math.round(this.fuel) !== before) this.refreshFuelBar();
 
     if (this.fuel <= LOW_FUEL && this.fuel > 0 && !this.lowFuelShown) {
@@ -1564,8 +1599,8 @@ export class DriveScene extends Phaser.Scene {
   private onCrash(c: LaneCrash): void {
     const cam = this.cameras.main;
     const visible = c.x > cam.scrollX - 120 && c.x < cam.scrollX + GAME_W + 120;
-    if (c.player === 'follower') {
-      // We drove into somebody: our mistake.
+    if (c.player === 'follower' || (c.player === 'leader' && this.reverseMode)) {
+      // We drove into somebody (forwards, or backing up into a car behind us): our mistake.
       if (this.crashCooldown > 0) return;
       this.crashCooldown = 2.5;
       this.stun = 1.1;
@@ -1718,7 +1753,7 @@ export class DriveScene extends Phaser.Scene {
     let brake = Boolean(this.brake.isDown || (k && (k.left.isDown || k.a.isDown)));
 
     // "Helper" mode: the bus brakes by itself before red lights and bus stops, and pulls back to the curb lane for stops.
-    if (this.assist && this.phase === 'driving') {
+    if (this.assist && this.phase === 'driving' && !this.reverseMode) {
       const f0 = this.bus.frontWorldX();
       if (this.busLane.lane === 0 && getSettings().traffic && this.level.parked.some((px) => px - f0 > -40 && px - f0 < 650)) {
         this.requestLane(1);
@@ -1744,7 +1779,8 @@ export class DriveScene extends Phaser.Scene {
     }
 
     // Nitro: a burst of speed while the button (or Shift / N) is held, never together with the brake.
-    const wantBoost = Boolean(this.nitroBtn.isDown || (k && (k.shift.isDown || k.n.isDown))) && this.phase === 'driving' && !brake;
+    const revMode = this.reverseMode && this.phase === 'driving';
+    const wantBoost = Boolean(this.nitroBtn.isDown || (k && (k.shift.isDown || k.n.isDown))) && this.phase === 'driving' && !brake && !revMode;
     const nit = nitroStep({ nitro: this.nitro, locked: this.nitroLocked }, wantBoost, dt);
     if (nit.boosting !== this.boosting) this.setBoosting(nit.boosting);
     this.nitro = nit.nitro;
@@ -1765,13 +1801,25 @@ export class DriveScene extends Phaser.Scene {
     const max = this.boosting ? maxNormal * NITRO.speedFactor : maxNormal;
     const vBefore = this.v;
     if (this.phase === 'driving') {
-      if (brake) this.v -= PHYSICS.brake * dt;
-      else if (gas) this.v += PHYSICS.accel * perf.accelFactor * fp * (this.boosting ? NITRO.accelFactor : 1) * dt;
-      else this.v -= PHYSICS.coast * dt;
+      if (revMode) {
+        // reverse gear: the pedal pulls backwards, slowly; the brake stops us
+        this.v = Math.max(0, this.v - PHYSICS.brake * dt);
+        if (brake) this.vr -= PHYSICS.brake * dt;
+        else if (gas) this.vr += REVERSE.accel * perf.accelFactor * fp * dt;
+        else this.vr -= PHYSICS.coast * dt;
+        this.vr = Phaser.Math.Clamp(this.vr, 0, REVERSE.max * perf.speedFactor * fp);
+      } else {
+        this.vr = Math.max(0, this.vr - PHYSICS.brake * dt);
+        if (brake) this.v -= PHYSICS.brake * dt;
+        else if (gas) this.v += PHYSICS.accel * perf.accelFactor * fp * (this.boosting ? NITRO.accelFactor : 1) * dt;
+        else this.v -= PHYSICS.coast * dt;
+      }
     } else if (this.phase === 'finishing') {
       this.v = Math.max(this.v, 260);
+      this.vr = 0;
     } else {
       this.v = 0;
+      this.vr = 0;
     }
     // We never exceed the limit by pushing; but speed left over from a boost bleeds off smoothly instead of snapping.
     if (this.v > max) this.v = vBefore > max ? Math.max(max, vBefore - 320 * dt) : max;
@@ -1779,8 +1827,13 @@ export class DriveScene extends Phaser.Scene {
 
     const prevFront = this.bus.frontWorldX();
     const prevX = this.bus.x;
-    const dx = this.v * dt;
+    const dx = (this.v - this.vr) * dt; // negative while reversing
     this.bus.x += dx;
+    const minX = this.bus.lengthWorld() / 2 + 20; // never back out of the world
+    if (this.bus.x < minX) {
+      this.bus.x = minX;
+      this.vr = 0;
+    }
     const steerAngle = stepLaneChange(this.busLane, dt);
     const busLift = bridgeLiftAt(this.level.bridges, this.bus.x);
     const busPitch = bridgeSlopeDegAt(this.level.bridges, this.bus.x);
@@ -1816,7 +1869,7 @@ export class DriveScene extends Phaser.Scene {
       const res = this.lane.update(dt, cam.scrollX, states, {
         x: this.bus.x,
         len: this.bus.lengthWorld(),
-        v: this.v,
+        v: this.v - this.vr,
         lane: this.busLane.lane,
         fromLane: this.busLane.fromLane,
         changeT: this.busLane.changeT,
@@ -1824,7 +1877,14 @@ export class DriveScene extends Phaser.Scene {
       });
       if (res.player) {
         this.bus.x = res.player.x;
-        this.v = Phaser.Math.Clamp(res.player.v, 0, maxNormal * NITRO.speedFactor + 150);
+        const rv = res.player.v;
+        if (rv >= 0) {
+          this.v = Phaser.Math.Clamp(rv, 0, maxNormal * NITRO.speedFactor + 150);
+          this.vr = 0;
+        } else {
+          this.v = 0;
+          this.vr = Phaser.Math.Clamp(-rv, 0, REVERSE.max * 2);
+        }
       }
       res.crashes.forEach((c) => this.onCrash(c));
       if (res.ambulanceEvent === 'approaching') {
@@ -1851,8 +1911,14 @@ export class DriveScene extends Phaser.Scene {
       this.lane.update(dt, cam.scrollX, states, null);
     }
     const front = this.bus.frontWorldX();
-    const speedRatio = Math.min(1.3, this.v / maxNormal);
-    this.bus.roll(dx, dt, Math.min(1.4, this.v / maxNormal));
+    const moving = Math.max(this.v, this.vr);
+    const speedRatio = Math.min(1.3, moving / maxNormal);
+    this.bus.roll(dx, dt, Math.min(1.4, moving / maxNormal));
+    this.beepT -= dt;
+    if (this.vr > 5 && this.beepT <= 0) {
+      audio.reverseBeep();
+      this.beepT = 0.55;
+    }
     audio.setEngine(speedRatio);
     audio.setMusicIntensity(0.18 + Math.min(1, speedRatio) * 0.82);
     if (this.v > 85) this.wasMovingFast = true;
@@ -1873,7 +1939,15 @@ export class DriveScene extends Phaser.Scene {
     this.useFuel(dt, gas && this.phase === 'driving', this.boosting);
 
     // Camera + parallax
-    cam.scrollX = Phaser.Math.Clamp(this.bus.x - this.camLead, 0, this.level.length - GAME_W);
+    // The bus moves on the screen: towards the middle when we speed up, back to its place when we brake, further back when we reverse.
+    const centerLead = GAME_W / 2 - 20;
+    const backLead = Math.max(this.bus.lengthWorld() / 2 + 30, this.camLead - 110);
+    const targetLead =
+      this.vr > 1
+        ? Phaser.Math.Linear(this.camLead, backLead, Math.min(1, this.vr / REVERSE.max))
+        : Phaser.Math.Linear(this.camLead, centerLead, Math.min(1, this.v / Math.max(1, maxNormal)));
+    this.leadNow += (targetLead - this.leadNow) * Math.min(1, dt * 2.2);
+    cam.scrollX = Phaser.Math.Clamp(this.bus.x - this.leadNow, 0, this.level.length - GAME_W);
     this.backdrop.update(cam.scrollX, dt);
     for (const bv of this.bridgeViews) bv.update(dt);
     this.traffic.update(dt, cam.scrollX, states);
@@ -2070,8 +2144,33 @@ export class DriveScene extends Phaser.Scene {
     }
   }
 
+  /** A stop we drove past can still be served: back up into its zone (reverse gear). */
+  private retryMissedStop(dt: number, front: number, gas: boolean, s: StopRt): void {
+    const z = s.data.zoneEnd;
+    if (!s.retryHinted && front < z + 900) {
+      s.retryHinted = true;
+      s.arrow.setVisible(true);
+      this.tweens.add({ targets: s.arrow, alpha: 1, duration: 300 });
+    }
+    if (this.phase === 'driving' && isInStopZone(front, z) && this.v < 3 && this.vr < 3 && !gas) {
+      if (this.busLane.lane === 0 && this.busLane.changeT <= 0) {
+        this.stillTime += dt;
+        if (this.stillTime > 0.25) {
+          this.stillTime = 0;
+          void this.serveStop(s);
+        }
+      }
+    } else if (isInStopZone(front, z)) {
+      this.stillTime = 0;
+    }
+  }
+
   private updateStops(dt: number, front: number, gas: boolean): void {
     for (const s of this.stops) {
+      if (s.state === 'missed') {
+        this.retryMissedStop(dt, front, gas, s);
+        continue;
+      }
       if (s.state !== 'waiting') continue;
       const z = s.data.zoneEnd;
       const wantingOff = this.aboardDestinations.filter((d) => d === s.data.place).length;
@@ -2109,6 +2208,10 @@ export class DriveScene extends Phaser.Scene {
           this.tweens.add({ targets: [p.img, p.arm], y: '-=30', yoyo: true, repeat: 2, duration: 160 });
         }
         this.mistake(t('missedStop'), POINTS.missedStop, this.bus.x);
+        if (!this.reverseHinted) {
+          this.reverseHinted = true;
+          this.time.delayedCall(1500, () => this.showBanner(t('reverseHint'), C.yellow, 2600));
+        }
         continue;
       }
       if (this.phase === 'driving' && isInStopZone(front, z) && this.v < 3 && !gas) {

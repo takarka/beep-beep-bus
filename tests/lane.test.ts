@@ -465,3 +465,28 @@ describe('uncontrolled crosswalks, STOP signs, parked cars and children signs', 
     expect(childrenZoneResult(300)).toBe('fast');
   });
 });
+
+import { PHYSICS, REVERSE } from '../src/core/rules';
+import { resolveLane as resolveBodies } from '../src/traffic/collision';
+
+describe('reverse gear', () => {
+  it('is slow and gentle compared with driving forwards', () => {
+    expect(REVERSE.max).toBeLessThan(200);
+    expect(REVERSE.accel).toBeLessThan(PHYSICS.accel);
+  });
+
+  it('backing into a car behind pushes it away and counts as a crash only when it is fast', () => {
+    // the car behind us (follower) at x = 0, our bus (leader) backing at -90 px/s
+    const slow = resolveBodies([
+      { x: 0, len: 100, v: 0 },
+      { x: 98, len: 100, v: -20 },
+    ]);
+    expect(slow).toHaveLength(0);
+    const fast = resolveBodies([
+      { x: 0, len: 100, v: 0 },
+      { x: 98, len: 100, v: -110 },
+    ]);
+    expect(fast).toHaveLength(1);
+    expect(fast[0]!.leader).toBe(1); // our bus is the one that was hit
+  });
+});

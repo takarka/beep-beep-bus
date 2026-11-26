@@ -107,6 +107,8 @@ export class BusView extends Phaser.GameObjects.Container {
   private beamOn = false;
   private joltTween: Phaser.Tweens.TweenChain | null = null;
   private damageG: G | null = null;
+  private reverseG: G | null = null;
+  private reverseOn = false;
   /** 0 = like new, 1 = wrecked. */
   private damage = 0;
   private parts: readonly Part[] = [];
@@ -231,6 +233,29 @@ export class BusView extends Phaser.GameObjects.Container {
         break;
       }
     }
+  }
+
+  /** White reversing lights at the back (they glow when the bus drives backwards). */
+  setReverse(on: boolean): void {
+    if (on === this.reverseOn) return;
+    this.reverseOn = on;
+    this.drawReverse();
+  }
+
+  private drawReverse(): void {
+    const g = this.reverseG;
+    if (!g) return;
+    g.clear();
+    if (!this.reverseOn) return;
+    const L = this.layout;
+    const x = L.taillight.x - 2;
+    const y = L.taillight.y + 14;
+    g.fillStyle(0xffffff, 0.22);
+    g.fillTriangle(x - 4, y - 8, x - 4, y + 12, x - 120, y + 26);
+    g.fillStyle(0xffffff, 1);
+    g.lineStyle(2, C.ink, 1);
+    g.fillRoundedRect(x - 6, y - 6, 10, 14, 3);
+    g.strokeRoundedRect(x - 6, y - 6, 10, 14, 3);
   }
 
   /** Where a broken part is on screen (for tapping it). */
@@ -633,6 +658,9 @@ export class BusView extends Phaser.GameObjects.Container {
     this.damageG = new Phaser.GameObjects.Graphics(scene);
     this.bodyC.add(this.damageG);
     this.drawDamage();
+    this.reverseG = new Phaser.GameObjects.Graphics(scene);
+    this.bodyC.add(this.reverseG);
+    this.drawReverse();
 
     // Amber turn signals (blink while changing lanes)
     this.blinkerG = new Phaser.GameObjects.Graphics(scene);

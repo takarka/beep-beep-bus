@@ -453,6 +453,12 @@ class AudioEngine {
     }
   }
 
+  /** The "beep… beep…" of a reversing bus. */
+  reverseBeep(): void {
+    if (!this.live()) return;
+    this.tone({ freq: 1000, dur: 0.2, type: 'square', vol: 0.06, attack: 0.004, filterHz: 2600 });
+  }
+
   /** One clank of a tool: a part is being hit. */
   clank(): void {
     if (!this.live()) return;

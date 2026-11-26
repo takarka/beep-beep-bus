@@ -56,6 +56,9 @@ export const STOP_ZONE = {
 /** Bus physics in world px/s and px/s². Gentle on purpose: the players are 4 years old. */
 export const PHYSICS = { accel: 320, coast: 200, brake: 700 } as const;
 
+/** Reversing is slow and careful: a low top speed and a gentle pull. */
+export const REVERSE = { max: 130, accel: 170 } as const;
+
 export const brakingDistance = (v: number): number => (v * v) / (2 * PHYSICS.brake);
 
 /** Can a bus moving at speed v still stop before the line (with a small safety margin)? */
