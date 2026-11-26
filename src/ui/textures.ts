@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { C, GAME_W, mix, shade } from '../config';
+import { C, GAME_W, luminance, mix, shade } from '../config';
 import { mulberry32, pick, randInt } from '../core/rng';
 import { envKey, paletteFor, type Env, type Palette } from '../core/world';
 import { LANE_Y } from '../traffic/lanes';
@@ -13,7 +13,7 @@ import { CITY_H, SKYLINE_H, makeCity, makeSkyline } from './cityscape';
 export const STREET_Y = 440; // top of the street texture on screen
 export const GROUND_Y = LANE_Y.main; // where bus wheels touch the road
 export const SIDEWALK_FEET_Y = 700; // where passengers stand on the near sidewalk
-export const PASSENGER_VARIANTS = 8;
+export const PASSENGER_VARIANTS = 9;
 /** How high the hips of a sitting passenger are above the feet in the texture (px, grown-up). */
 export const SIT_HIP = 28;
 
@@ -258,9 +258,17 @@ interface Look {
   skin: number;
   hair: number;
   style: 'short' | 'long' | 'ponytail' | 'bun';
-  hat: 'none' | 'cap' | 'kalpak' | 'tubeteika' | 'scarf' | 'bow';
+  hat: 'none' | 'cap' | 'kalpak' | 'tubeteika' | 'scarf' | 'bow' | 'beanie';
   hatColor: number;
   glasses?: boolean;
+  /** A child (smaller). */
+  kid?: boolean;
+  /** 0 T-shirt and trousers, 1 jacket, 2 dress, 3 rucksack. */
+  outfit: 0 | 1 | 2 | 3;
+  /** Colour of the top (otherwise one from the shirt palette). */
+  cloth?: number;
+  /** Colour of the legs under a dress (otherwise bare skin). */
+  legs?: number;
 }
 const SKIN_A = 0xf1cfa8;
 const SKIN_B = 0xe6b98c;
@@ -268,15 +276,19 @@ const SKIN_C = 0xd9a574;
 const BLACK = 0x1f1d24;
 const DARK_BROWN = 0x2b2118;
 export const LOOKS: readonly Look[] = [
-  { skin: SKIN_B, hair: BLACK, style: 'short', hat: 'none', hatColor: 0 }, // 0 a man
-  { skin: SKIN_A, hair: BLACK, style: 'short', hat: 'cap', hatColor: C.red }, // 1 a man in a cap
-  { skin: SKIN_A, hair: BLACK, style: 'long', hat: 'bow', hatColor: C.red }, // 2 a girl with long hair and a bow
-  { skin: SKIN_C, hair: DARK_BROWN, style: 'ponytail', hat: 'none', hatColor: 0 }, // 3 a woman with a ponytail
-  { skin: SKIN_B, hair: BLACK, style: 'short', hat: 'tubeteika', hatColor: 0x2f3e8f }, // 4 a man in a skullcap
-  { skin: SKIN_A, hair: BLACK, style: 'short', hat: 'kalpak', hatColor: 0xfff6e0 }, // 5 a boy in a felt kalpak
-  { skin: SKIN_B, hair: DARK_BROWN, style: 'long', hat: 'scarf', hatColor: 0xe76f51 }, // 6 a woman in a headscarf
-  { skin: SKIN_C, hair: 0x8a8a92, style: 'bun', hat: 'none', hatColor: 0, glasses: true }, // 7 a grandmother with glasses
+  { skin: SKIN_B, hair: BLACK, style: 'short', hat: 'none', hatColor: 0, outfit: 0 }, // 0 a man
+  { skin: SKIN_A, hair: BLACK, style: 'short', hat: 'cap', hatColor: C.red, outfit: 1 }, // 1 a man in a cap
+  { skin: SKIN_A, hair: BLACK, style: 'long', hat: 'bow', hatColor: C.red, kid: true, outfit: 2 }, // 2 a girl with long hair and a bow
+  { skin: SKIN_C, hair: DARK_BROWN, style: 'ponytail', hat: 'none', hatColor: 0, outfit: 3 }, // 3 a woman with a ponytail
+  { skin: SKIN_B, hair: BLACK, style: 'short', hat: 'tubeteika', hatColor: 0x2f3e8f, outfit: 0 }, // 4 a man in a skullcap
+  { skin: SKIN_A, hair: BLACK, style: 'short', hat: 'beanie', hatColor: C.blue, kid: true, outfit: 1 }, // 5 a boy in a knitted hat
+  { skin: SKIN_B, hair: DARK_BROWN, style: 'long', hat: 'scarf', hatColor: 0xe76f51, outfit: 2 }, // 6 a woman in a headscarf
+  { skin: SKIN_C, hair: 0x8a8a92, style: 'bun', hat: 'none', hatColor: 0, glasses: true, outfit: 2, cloth: 0x6f9a9c, legs: 0x8d7b6c }, // 7 a grandmother in a dress
+  { skin: SKIN_B, hair: 0x8a8a92, style: 'short', hat: 'scarf', hatColor: 0xf3e9d2, glasses: true, outfit: 2, cloth: 0x8d6e9e, legs: 0x8d7b6c }, // 8 a grandmother in a headscarf and a dress
 ];
+
+/** Is this person a child (drawn smaller)? */
+export const isKid = (variant: number): boolean => LOOKS[variant % LOOKS.length]?.kid === true;
 
 const darker = (c: number): number => shade(c, -0.18);
 
@@ -337,8 +349,23 @@ function drawHat(g: G, look: Look, hx: number, hy: number, R: number, s: number,
       g.fillRoundedRect(hx - R - 3 * s, hy - 3 * s, 6 * s, R * 1.4, 4);
       g.fillRoundedRect(hx + R - 3 * s, hy - 3 * s, 6 * s, R * 1.4, 4);
     }
-    g.fillStyle(0xffffff, 0.7);
+    g.fillStyle(luminance(col) > 0.75 ? 0xc9a06a : 0xffffff, 0.75);
     for (const [dx, dy] of [[-0.5, -1.0], [0.1, -1.3], [0.6, -0.9]] as const) g.fillCircle(hx + dx * R, hy + dy * R, 1.8);
+  } else if (look.hat === 'beanie') {
+    // a knitted winter hat with a ribbed edge, a stripe and a pompom
+    g.fillStyle(col, 1);
+    g.slice(hx, hy - 1, R + 2, Math.PI, 2 * Math.PI, false);
+    g.fillPath();
+    g.beginPath();
+    g.arc(hx, hy - 1, R + 2, Math.PI, 2 * Math.PI, false);
+    g.strokePath();
+    g.fillStyle(0xffffff, 0.9);
+    g.fillRect(hx - R * 0.95, hy - R * 0.95, R * 1.9, 3 * s);
+    g.fillStyle(darker(col), 1);
+    g.fillRoundedRect(hx - R - 2.5 * s, hy - R * 0.45 - 2 * s, 2 * R + 5 * s, 7 * s, 3);
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(hx + (side ? -R * 0.2 : 0), hy - R - 5 * s, 5 * s);
+    g.strokeCircle(hx + (side ? -R * 0.2 : 0), hy - R - 5 * s, 5 * s);
   } else if (look.hat === 'bow') {
     g.fillStyle(col, 1);
     const bx = side ? hx - R * 0.6 : hx + R * 0.7;
@@ -501,7 +528,8 @@ function passengers(scene: Phaser.Scene): void {
     const pants = pick(rng, [0x3d405b, 0x2d2a32, 0x6d597a]);
     for (const seated of [false, true]) {
     const g = make(scene);
-    const kid = i % 3 === 2;
+    const look = LOOKS[i % LOOKS.length]!;
+    const kid = look.kid === true;
     const s = kid ? 0.75 : 1;
     const cx = 32;
     const feet = 118;
@@ -522,11 +550,18 @@ function passengers(scene: Phaser.Scene): void {
       g.fillRoundedRect(cx + 2 * s, feet - legH, 10 * s, legH, 3);
     }
     // body
-    const shirt = shirts[i % shirts.length]!;
+    const shirt = look.cloth ?? shirts[i % shirts.length]!;
     g.fillStyle(shirt, 1);
     const bodyTop = feet - hip - bodyH + 4;
     g.fillRoundedRect(cx - 16 * s, bodyTop, 32 * s, bodyH, { tl: 12 * s, tr: 12 * s, bl: 4, br: 4 });
     g.strokeRoundedRect(cx - 16 * s, bodyTop, 32 * s, bodyH, { tl: 12 * s, tr: 12 * s, bl: 4, br: 4 });
+    if (look.outfit === 2) {
+      // a dress: a skirt flaring over the legs (down to the knee, or over the lap when sitting)
+      const sk = seated ? 10 * s : 22 * s;
+      g.fillStyle(shirt, 1);
+      g.fillPoints([new Phaser.Math.Vector2(cx - 15 * s, feet - hip - 4), new Phaser.Math.Vector2(cx + 15 * s, feet - hip - 4), new Phaser.Math.Vector2(cx + 20 * s, feet - hip + sk), new Phaser.Math.Vector2(cx - 20 * s, feet - hip + sk)], true);
+      g.strokePoints([new Phaser.Math.Vector2(cx - 15 * s, feet - hip - 4), new Phaser.Math.Vector2(cx + 15 * s, feet - hip - 4), new Phaser.Math.Vector2(cx + 20 * s, feet - hip + sk), new Phaser.Math.Vector2(cx - 20 * s, feet - hip + sk)], true, true);
+    }
     // arms
     g.fillStyle(shade(shirt, -0.15), 1);
     g.fillRoundedRect(cx - 22 * s, bodyTop + 6, 8 * s, 30 * s, 4);
@@ -571,11 +606,13 @@ function sidePeople(scene: Phaser.Scene): void {
   const SHOES = [0xffffff, C.ink, 0xe63946, 0xf6d5b8];
   for (let i = 0; i < PASSENGER_VARIANTS; i++) {
     const pants = pick(rng, [0x3d405b, 0x2d2a32, 0x6d597a]); // the same trousers as the front view
-    const kid = i % 3 === 2;
+    const look = LOOKS[i % LOOKS.length]!;
+    const kid = look.kid === true;
     const s = kid ? 0.78 : 1;
-    const shirt = shirts[i % shirts.length]!;
+    const shirt = look.cloth ?? shirts[i % shirts.length]!;
     const skin = LOOKS[i % LOOKS.length]!.skin;
-    const outfit = i % 4; // 0 T-shirt, 1 jacket, 2 dress, 3 rucksack
+    const outfit = look.outfit;
+    const legSkin = look.legs ?? skin; // bare legs, or tights
     const shoe = SHOES[i % SHOES.length]!;
     const thigh = 17 * s;
     const shin = 17 * s;
@@ -636,7 +673,7 @@ function sidePeople(scene: Phaser.Scene): void {
       const sleeve = outfit === 1 ? shade(shirt, -0.2) : shirt;
 
       // the far side first (leg, arm), then the rucksack, the body, the near side, the head
-      drawLeg(jf, shade(outfit === 2 ? skin : pants, -0.2), far.hip);
+      drawLeg(jf, shade(outfit === 2 ? legSkin : pants, -0.2), far.hip);
       drawArm(phase + 0.5, shade(sleeve, -0.2));
       if (outfit === 3) {
         g.fillStyle(shade(shirt, 0.0) === C.blue ? C.orange : C.blue, 1);
@@ -683,7 +720,7 @@ function sidePeople(scene: Phaser.Scene): void {
         g.fillStyle(shade(pants, 0.1), 1);
         g.fillRect(hip.x - wst + 2, hip.y - 7 * s, wst * 2 + 1, 5 * s); // belt of the trousers
       }
-      drawLeg(jn, outfit === 2 ? skin : pants, near.hip);
+      drawLeg(jn, outfit === 2 ? legSkin : pants, near.hip);
       drawArm(phase, sleeve);
 
       // neck and head in profile

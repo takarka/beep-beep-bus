@@ -27,7 +27,7 @@ import { TrafficLightModel, type LightState } from '../core/traffic';
 import { t, type TextKey } from '../i18n';
 import { benchSeats, drawBench, drawShelter, shelterSeats, type Seat } from '../ui/stopShelter';
 import { Icons, drawChildrenSign, drawCrosswalkSign, drawMiniLight, drawPlaceIcon, drawRoadStopSign, drawStar, drawStopSign } from '../ui/draw';
-import { GROUND_Y, PASSENGER_VARIANTS, SIDEWALK_FEET_Y, SIT_HIP, STREET_Y } from '../ui/textures';
+import { GROUND_Y, PASSENGER_VARIANTS, SIDEWALK_FEET_Y, SIT_HIP, STREET_Y, isKid } from '../ui/textures';
 import { BridgeView } from '../ui/bridge';
 import { createScenery } from '../ui/scenery';
 import { cityForLevel, landmarkForLevel } from '../core/campaign';
@@ -589,7 +589,7 @@ export class DriveScene extends Phaser.Scene {
       }
       const dest = data.destinations[i] ?? data.place;
       const variant = Math.floor(this.rng() * PASSENGER_VARIANTS);
-      const kidK = variant % 3 === 2 ? 0.75 : 1;
+      const kidK = isKid(variant) ? 0.75 : 1;
       const sitY = seat ? seat.y + (SIT_HIP * kidK - 8) * PAX_SCALE : SIDEWALK_FEET_Y;
       const img = this.add
         .image(px, sitY, seat ? `paxSit${variant}` : `pax${variant}`)

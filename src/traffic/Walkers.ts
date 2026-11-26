@@ -66,7 +66,7 @@ export class Walkers {
     // keep people apart: if somebody is already there, step aside a little (children walk right beside their parent)
     if (!kid) for (let tries = 0; tries < 8 && this.walkers.some((o) => o.far === far && Math.abs(o.x - x) < 110 * scale + 40); tries++) x += (rng() < 0.5 ? -1 : 1) * (90 + rng() * 120);
     let variant = Math.floor(rng() * PASSENGER_VARIANTS);
-    if (kid) variant = rng() < 0.5 ? 2 : 5; // the small pictures are every third one
+    if (kid) variant = rng() < 0.5 ? 2 : 5; // the two children
     const feetY = (far ? FAR_FEET : NEAR_FEET)[0] + rng() * ((far ? FAR_FEET : NEAR_FEET)[1] - (far ? FAR_FEET : NEAR_FEET)[0]);
     const depth = far ? -4.8 + feetY / 100000 : 20 + (feetY - 650) / 1000;
     const img = this.scene.add.image(x, feetY, `side${variant}_1`).setOrigin(0.5, 1).setScale(scale).setDepth(depth);
