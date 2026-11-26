@@ -258,7 +258,7 @@ interface Look {
   skin: number;
   hair: number;
   style: 'short' | 'long' | 'ponytail' | 'bun';
-  hat: 'none' | 'cap' | 'kalpak' | 'tubeteika' | 'scarf' | 'bow' | 'beanie';
+  hat: 'none' | 'cap' | 'kalpak' | 'tubeteika' | 'kerchief' | 'bow' | 'beanie';
   hatColor: number;
   glasses?: boolean;
   /** A child (smaller). */
@@ -282,9 +282,9 @@ export const LOOKS: readonly Look[] = [
   { skin: SKIN_C, hair: DARK_BROWN, style: 'ponytail', hat: 'none', hatColor: 0, outfit: 3 }, // 3 a woman with a ponytail
   { skin: SKIN_B, hair: BLACK, style: 'short', hat: 'tubeteika', hatColor: 0x2f3e8f, outfit: 0 }, // 4 a man in a skullcap
   { skin: SKIN_A, hair: BLACK, style: 'short', hat: 'beanie', hatColor: C.blue, kid: true, outfit: 1 }, // 5 a boy in a knitted hat
-  { skin: SKIN_B, hair: DARK_BROWN, style: 'long', hat: 'scarf', hatColor: 0xe76f51, outfit: 2 }, // 6 a woman in a headscarf
+  { skin: SKIN_B, hair: DARK_BROWN, style: 'short', hat: 'kerchief', hatColor: 0xe76f51, outfit: 2 }, // 6 a woman in a kerchief
   { skin: SKIN_C, hair: 0x8a8a92, style: 'bun', hat: 'none', hatColor: 0, glasses: true, outfit: 2, cloth: 0x6f9a9c, legs: 0x8d7b6c }, // 7 a grandmother in a dress
-  { skin: SKIN_B, hair: 0x8a8a92, style: 'short', hat: 'scarf', hatColor: 0xf3e9d2, glasses: true, outfit: 2, cloth: 0x8d6e9e, legs: 0x8d7b6c }, // 8 a grandmother in a headscarf and a dress
+  { skin: SKIN_B, hair: 0x8a8a92, style: 'short', hat: 'kerchief', hatColor: 0xf48fb8, glasses: true, outfit: 2, cloth: 0x7aa7d6, legs: 0x8d7b6c }, // 8 a grandmother in a pink kerchief and a dress, like Masha's
 ];
 
 /** Is this person a child (drawn smaller)? */
@@ -336,21 +336,59 @@ function drawHat(g: G, look: Look, hx: number, hy: number, R: number, s: number,
     for (let k = 0; k < 5; k++) g.fillTriangle(hx - R * 0.8 + k * R * 0.4, hy - R * 0.55, hx - R * 0.6 + k * R * 0.4, hy - R * 0.55, hx - R * 0.7 + k * R * 0.4, hy - R * 0.85);
     g.fillStyle(0xffd23f, 1);
     g.fillRect(hx - R * 0.9, hy - R * 0.55, R * 1.8, 3);
-  } else if (look.hat === 'scarf') {
-    // a headscarf: over the head, framing the face, tied at the back
+  } else if (look.hat === 'kerchief') {
+    // a kerchief tied under the chin, like a village grandmother's: it covers the head down to the brow,
+    // hangs along the cheeks and ends in a knot with two little tails under the chin (a bit of fringe shows)
+    const edge = darker(col);
+    const dot = luminance(col) > 0.75 ? 0xc9a06a : 0xffffff;
     g.fillStyle(col, 1);
-    g.slice(hx, hy - 1, R + 2.5, Math.PI, 2 * Math.PI, false);
+    g.slice(hx, hy - 1, R + 3 * s, Math.PI, 2 * Math.PI, false);
     g.fillPath();
+    g.beginPath();
+    g.arc(hx, hy - 1, R + 3 * s, Math.PI, 2 * Math.PI, false);
+    g.strokePath();
+    g.lineStyle(2.5, edge, 1);
+    g.lineBetween(hx - R - 1, hy - 1, hx + R + 1, hy - 1); // the hem across the brow
+    g.lineStyle(3, C.ink, 1);
     if (side) {
-      g.fillRoundedRect(hx - R - 4 * s, hy - 4 * s, 9 * s, R * 1.5, 5);
-      g.fillStyle(darker(col), 1);
-      g.fillCircle(hx - R - 2 * s, hy + R * 0.8, 4 * s);
+      // cloth falling behind the head, a band under the cheek and the knot under the chin
+      g.fillStyle(col, 1);
+      g.fillRoundedRect(hx - R - 5 * s, hy - 3 * s, 10 * s, R * 1.6, 5 * s);
+      g.strokeRoundedRect(hx - R - 5 * s, hy - 3 * s, 10 * s, R * 1.6, 5 * s);
+      g.lineStyle(5 * s + 5, C.ink, 1);
+      g.lineBetween(hx - R * 0.8, hy + R * 0.85, hx + R * 0.15, hy + R * 1.15);
+      g.lineStyle(5 * s, col, 1);
+      g.lineBetween(hx - R * 0.8, hy + R * 0.85, hx + R * 0.15, hy + R * 1.15);
+      g.lineStyle(3, C.ink, 1);
+      g.fillStyle(col, 1);
+      g.fillTriangle(hx + R * 0.15, hy + R * 1.18, hx - 2 * s, hy + R * 1.6, hx + 4 * s, hy + R * 1.58);
+      g.fillCircle(hx + R * 0.15, hy + R * 1.15, 3.4 * s);
+      g.strokeCircle(hx + R * 0.15, hy + R * 1.15, 3.4 * s);
+      g.fillStyle(dot, 0.85);
+      for (const [dx, dy] of [[-0.55, -0.75], [-0.1, -1.05], [0.35, -0.8], [-0.95, 0.1], [-0.9, 0.7]] as const) g.fillCircle(hx + dx * R, hy + dy * R, 2 * s);
     } else {
-      g.fillRoundedRect(hx - R - 3 * s, hy - 3 * s, 6 * s, R * 1.4, 4);
-      g.fillRoundedRect(hx + R - 3 * s, hy - 3 * s, 6 * s, R * 1.4, 4);
+      // cloth along each cheek, a band under the chin, and the knot with two tails
+      g.fillStyle(col, 1);
+      for (const x of [hx - R - 4 * s, hx + R - 1 * s]) {
+        g.fillRoundedRect(x, hy - 2 * s, 5 * s, R * 1.3, 3 * s);
+        g.strokeRoundedRect(x, hy - 2 * s, 5 * s, R * 1.3, 3 * s);
+      }
+      const chin: Array<[number, number]> = [[hx - R - 1.5 * s, hy + R * 0.8], [hx, hy + R * 1.12], [hx + R + 1.5 * s, hy + R * 0.8]];
+      g.lineStyle(5 * s + 5, C.ink, 1);
+      g.lineBetween(chin[0]![0], chin[0]![1], chin[1]![0], chin[1]![1]);
+      g.lineBetween(chin[1]![0], chin[1]![1], chin[2]![0], chin[2]![1]);
+      g.lineStyle(5 * s, col, 1);
+      g.lineBetween(chin[0]![0], chin[0]![1], chin[1]![0], chin[1]![1]);
+      g.lineBetween(chin[1]![0], chin[1]![1], chin[2]![0], chin[2]![1]);
+      g.lineStyle(3, C.ink, 1);
+      g.fillStyle(col, 1);
+      g.fillTriangle(hx, hy + R * 1.14, hx - 8 * s, hy + R * 1.6, hx - 1.5 * s, hy + R * 1.62);
+      g.fillTriangle(hx, hy + R * 1.14, hx + 8 * s, hy + R * 1.6, hx + 1.5 * s, hy + R * 1.62);
+      g.fillCircle(hx, hy + R * 1.14, 3.6 * s);
+      g.strokeCircle(hx, hy + R * 1.14, 3.6 * s);
+      g.fillStyle(dot, 0.85);
+      for (const [dx, dy] of [[-0.6, -0.7], [0, -1.0], [0.6, -0.7], [-1.18, 0.3], [1.1, 0.3]] as const) g.fillCircle(hx + dx * R, hy + dy * R, 1.7 * s);
     }
-    g.fillStyle(luminance(col) > 0.75 ? 0xc9a06a : 0xffffff, 0.75);
-    for (const [dx, dy] of [[-0.5, -1.0], [0.1, -1.3], [0.6, -0.9]] as const) g.fillCircle(hx + dx * R, hy + dy * R, 1.8);
   } else if (look.hat === 'beanie') {
     // a knitted winter hat with a ribbed edge, a stripe and a pompom
     g.fillStyle(col, 1);
@@ -383,7 +421,7 @@ function drawHeadFront(g: G, i: number, cx: number, hy: number, R: number, s: nu
   g.lineStyle(3, C.ink, 1);
   // hair behind the head: long hair falls to the shoulders
   g.fillStyle(look.hair, 1);
-  if (look.style === 'long' && look.hat !== 'scarf') {
+  if (look.style === 'long' && look.hat !== 'kerchief') {
     // long hair falls on both sides of the face (never across the chest)
     for (const x of [cx - R - 5 * s, cx + R - 2 * s]) {
       g.fillRoundedRect(x, hy - R * 0.3, 7 * s, R * 1.9, 4 * s);
@@ -452,7 +490,7 @@ function drawHeadSide(g: G, i: number, hx: number, hy: number, R: number, s: num
   g.lineStyle(3, C.ink, 1);
   // hair behind the head
   g.fillStyle(look.hair, 1);
-  if (look.style === 'long' && look.hat !== 'scarf') {
+  if (look.style === 'long' && look.hat !== 'kerchief') {
     g.fillRoundedRect(hx - R - 5 * s, hy - R * 0.6, R * 1.3, R * 2.3, 8 * s);
     g.strokeRoundedRect(hx - R - 5 * s, hy - R * 0.6, R * 1.3, R * 2.3, 8 * s);
   }
@@ -472,7 +510,7 @@ function drawHeadSide(g: G, i: number, hx: number, hy: number, R: number, s: num
   g.fillStyle(shade(look.skin, -0.3), 1);
   g.fillCircle(hx - 3 * s, hy + 2 * s, 1.6 * s);
   // hair on top and a fringe
-  if (look.hat !== 'kalpak' && look.hat !== 'tubeteika' && look.hat !== 'scarf') {
+  if (look.hat !== 'kalpak' && look.hat !== 'tubeteika') {
     g.fillStyle(look.hair, 1);
     g.slice(hx - 1, hy - 1, R + 1.5, Math.PI * 0.9, 2 * Math.PI, false);
     g.fillPath();
