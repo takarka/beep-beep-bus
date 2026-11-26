@@ -321,6 +321,127 @@ function passengers(scene: Phaser.Scene): void {
   }
 }
 
+/**
+ * People seen from the side, walking to the right (the game flips them to walk left): four pictures of a step,
+ * `side<variant>_<0..3>`: legs apart, passing (one leg lifted), legs apart the other way, passing. Feet at the bottom.
+ */
+function sidePeople(scene: Phaser.Scene): void {
+  const rng = mulberry32(99);
+  const shirts = [C.red, C.blue, C.green, C.orange, C.purple, 0xf15bb5, 0x2ec4b6, C.yellow];
+  const skins = [0xf6d5b8, 0xe8b894, 0xc68e64, 0x8d5a3b];
+  const hairs = [0x2d2a32, 0x6b3e26, 0xc58b3c, 0x9c4a2f, 0x8a8a8a];
+  for (let i = 0; i < PASSENGER_VARIANTS; i++) {
+    const pants = pick(rng, [0x3d405b, 0x2d2a32, 0x6d597a]); // the same trousers as the front view
+    const kid = i % 3 === 2;
+    const s = kid ? 0.75 : 1;
+    const shirt = shirts[i % shirts.length]!;
+    const skin = skins[i % skins.length]!;
+    const cx = 32;
+    const feet = 118;
+    const legH = 34 * s;
+    const bodyH = 42 * s;
+    const headR = 15 * s;
+    const hip = feet - legH;
+    // swing of each foot and how high it is lifted, per picture
+    const frames: Array<{ front: number; lift: number; liftRear: number }> = [
+      { front: 1, lift: 0, liftRear: 0 },
+      { front: 0, lift: 0, liftRear: 6 },
+      { front: -1, lift: 0, liftRear: 0 },
+      { front: 0, lift: 6, liftRear: 0 },
+    ];
+    frames.forEach((f, k) => {
+      const g = make(scene);
+      const leg = (dx: number, lift: number, color: number): void => {
+        const fx = cx + dx * 15 * s;
+        const fy = feet - lift * s;
+        g.lineStyle(11 * s + 5, C.ink, 1);
+        g.lineBetween(cx, hip, fx, fy);
+        g.lineStyle(11 * s, color, 1);
+        g.lineBetween(cx, hip, fx, fy);
+        g.fillStyle(C.ink, 1); // shoe, pointing forward
+        g.fillRoundedRect(fx - 5 * s, fy - 4 * s, 15 * s, 7 * s, 3);
+      };
+      const arm = (dx: number, color: number): void => {
+        const sx = cx;
+        const sy = hip - bodyH + 12 * s;
+        g.lineStyle(8 * s + 4, C.ink, 1);
+        g.lineBetween(sx, sy, sx + dx * 12 * s, sy + 28 * s);
+        g.lineStyle(8 * s, color, 1);
+        g.lineBetween(sx, sy, sx + dx * 12 * s, sy + 28 * s);
+      };
+      const dark = shade(shirt, -0.15);
+      // the far leg and arm first, then the body, then the near leg and arm
+      leg(-f.front * 0.9, f.liftRear, shade(pants, -0.2));
+      arm(f.front, shade(dark, -0.15));
+      g.lineStyle(3, C.ink, 1);
+      g.fillStyle(shirt, 1);
+      const bodyTop = hip - bodyH + 4;
+      g.fillRoundedRect(cx - 13 * s, bodyTop, 26 * s, bodyH, { tl: 11 * s, tr: 11 * s, bl: 4, br: 4 });
+      g.strokeRoundedRect(cx - 13 * s, bodyTop, 26 * s, bodyH, { tl: 11 * s, tr: 11 * s, bl: 4, br: 4 });
+      leg(f.front * 0.9, f.lift, pants);
+      arm(-f.front, dark);
+      // head in profile: a nose, an eye, hair at the back and on top, a cap for some
+      const hy = bodyTop - headR + 2;
+      g.lineStyle(3, C.ink, 1);
+      g.fillStyle(skin, 1);
+      g.fillCircle(cx + 1, hy, headR);
+      g.strokeCircle(cx + 1, hy, headR);
+      g.fillCircle(cx + headR + 1, hy + 3, 3.5 * s);
+      g.fillStyle(i % 4 === 1 ? C.red : hairs[i % hairs.length]!, 1);
+      g.slice(cx - 1, hy - 1, headR + 1, Math.PI * 0.85, Math.PI * 2.05, false);
+      g.fillPath();
+      if (i % 4 === 1) g.fillRect(cx + 4, hy - 5, headR + 8, 5); // the peak of the cap
+      g.fillStyle(C.ink, 1);
+      g.fillCircle(cx + 7 * s, hy + 1, 2.2);
+      g.lineStyle(2, C.ink, 1);
+      g.beginPath();
+      g.arc(cx + 5 * s, hy + 5, 4 * s, 0.4, 1.9);
+      g.strokePath();
+      g.generateTexture(`side${i}_${k}`, 64, 120);
+      g.destroy();
+    });
+  }
+}
+
+/** A little dog (two walking pictures) and an umbrella, for the people who walk about the town. */
+function townFolk(scene: Phaser.Scene): void {
+  for (const [name, spread] of [['dogA', 7], ['dogB', 2]] as const) {
+    const g = make(scene);
+    g.lineStyle(3, C.ink, 1);
+    g.fillStyle(0xc68e64, 1);
+    // legs
+    for (const lx of [10, 18, 36, 44]) {
+      const off = lx < 30 ? (lx === 10 ? -spread : spread) : lx === 36 ? spread : -spread;
+      g.fillRoundedRect(lx + off * 0.5, 22, 6, 14, 2);
+    }
+    // tail, body, head, ear, nose
+    g.lineBetween(8, 14, 2, 6);
+    g.fillRoundedRect(8, 10, 40, 18, 8);
+    g.strokeRoundedRect(8, 10, 40, 18, 8);
+    g.fillCircle(52, 10, 9);
+    g.strokeCircle(52, 10, 9);
+    g.fillStyle(0x8a5a3b, 1);
+    g.fillEllipse(48, 4, 7, 12);
+    g.fillStyle(C.ink, 1);
+    g.fillCircle(58, 9, 2.5);
+    g.fillCircle(54, 7, 1.8);
+    g.generateTexture(name, 64, 40);
+    g.destroy();
+  }
+  const u = make(scene);
+  u.fillStyle(0xffffff, 1);
+  u.lineStyle(3, C.ink, 1);
+  u.slice(40, 36, 36, Math.PI, 0, false);
+  u.fillPath();
+  u.beginPath();
+  u.arc(40, 36, 36, Math.PI, 0, false);
+  u.closePath();
+  u.strokePath();
+  u.lineBetween(40, 36, 40, 70);
+  u.generateTexture('umbrella', 80, 72);
+  u.destroy();
+}
+
 function confettiTex(scene: Phaser.Scene): void {
   const g = make(scene);
   g.fillStyle(0xffffff, 1);
@@ -358,6 +479,8 @@ function weatherTextures(scene: Phaser.Scene): void {
 export function generateAllTextures(scene: Phaser.Scene): void {
   cloud(scene);
   passengers(scene);
+  townFolk(scene);
+  sidePeople(scene);
   confettiTex(scene);
   weatherTextures(scene);
 }

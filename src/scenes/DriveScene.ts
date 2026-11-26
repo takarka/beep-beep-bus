@@ -33,6 +33,7 @@ import { createScenery } from '../ui/scenery';
 import { cityForLevel, landmarkForLevel } from '../core/campaign';
 import { drawLandmark } from '../ui/landmarks';
 import { drawLandmarkBig } from '../ui/landmarkScenes';
+import { Walkers } from '../traffic/Walkers';
 import { TrafficManager } from '../traffic/TrafficManager';
 import { BUMP, CHILDREN, LOW_FUEL, MAX_FUEL, MAX_HEALTH, NITRO, bumpDamage, bumpResult, childrenZoneResult, conditionOf, crashDamage, fuelPerformance, fuelUse, nitroStep, performanceFor } from '../core/rules';
 import { LaneTraffic, type LaneCrash } from '../traffic/LaneTraffic';
@@ -143,6 +144,7 @@ export class DriveScene extends Phaser.Scene {
   private assist = false;
   private traffic!: TrafficManager;
   private lane!: LaneTraffic;
+  private walkers!: Walkers;
   /** 100 = like new. Crashes and hard bumps wear the bus out. */
   private health = MAX_HEALTH;
   private hpC!: Phaser.GameObjects.Container;
@@ -291,6 +293,8 @@ export class DriveScene extends Phaser.Scene {
       off: !getSettings().traffic,
     });
     this.lane.prewarm(START_X);
+    this.walkers = new Walkers(this, { night: env.time === 'night', rainy: env.precip && env.season !== 'winter' });
+    this.walkers.prewarm(Phaser.Math.Clamp(START_X - this.camLead, 0, this.level.length - GAME_W));
     this.bus.setPassengers(0);
     this.bridgeViews = this.level.bridges.map((b) => new BridgeView(this, b, env));
 
@@ -849,6 +853,7 @@ export class DriveScene extends Phaser.Scene {
     if (now - this.lastHorn < 500) return;
     this.lastHorn = now;
     audio.horn(this.busBody);
+    this.walkers.honk(this.cameras.main.scrollX);
     const lift = bridgeLiftAt(this.level.bridges, this.bus.x);
     floatText(this, this.bus.frontWorldX() - 40, 400 - lift, t('beep'), C.yellow, 44);
     const s = this.bus.scaleX;
@@ -1872,6 +1877,7 @@ export class DriveScene extends Phaser.Scene {
     this.backdrop.update(cam.scrollX, dt);
     for (const bv of this.bridgeViews) bv.update(dt);
     this.traffic.update(dt, cam.scrollX, states);
+    this.walkers.update(dt, cam.scrollX);
 
     this.progressBus.x = Phaser.Math.Clamp(this.toBar(this.bus.x), 370, 860);
 
