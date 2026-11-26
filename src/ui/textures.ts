@@ -247,12 +247,256 @@ export function ensureEnvTextures(scene: Phaser.Scene, env: Env): void {
   street(scene, env, p, `street_${k}`);
 }
 
+type G = Phaser.GameObjects.Graphics;
+
+/**
+ * The look of each of the town's people: skin, hair, and what is on their head. They are people of Kazakhstan:
+ * dark hair, warm skin tones, almond-shaped eyes, and a skullcap (tubeteika), a felt kalpak or a headscarf
+ * on some, next to ordinary caps and bows. The same look is used in the front, seated and side pictures.
+ */
+interface Look {
+  skin: number;
+  hair: number;
+  style: 'short' | 'long' | 'ponytail' | 'bun';
+  hat: 'none' | 'cap' | 'kalpak' | 'tubeteika' | 'scarf' | 'bow';
+  hatColor: number;
+  glasses?: boolean;
+}
+const SKIN_A = 0xf1cfa8;
+const SKIN_B = 0xe6b98c;
+const SKIN_C = 0xd9a574;
+const BLACK = 0x1f1d24;
+const DARK_BROWN = 0x2b2118;
+export const LOOKS: readonly Look[] = [
+  { skin: SKIN_B, hair: BLACK, style: 'short', hat: 'none', hatColor: 0 }, // 0 a man
+  { skin: SKIN_A, hair: BLACK, style: 'short', hat: 'cap', hatColor: C.red }, // 1 a man in a cap
+  { skin: SKIN_A, hair: BLACK, style: 'long', hat: 'bow', hatColor: C.red }, // 2 a girl with long hair and a bow
+  { skin: SKIN_C, hair: DARK_BROWN, style: 'ponytail', hat: 'none', hatColor: 0 }, // 3 a woman with a ponytail
+  { skin: SKIN_B, hair: BLACK, style: 'short', hat: 'tubeteika', hatColor: 0x2f3e8f }, // 4 a man in a skullcap
+  { skin: SKIN_A, hair: BLACK, style: 'short', hat: 'kalpak', hatColor: 0xfff6e0 }, // 5 a boy in a felt kalpak
+  { skin: SKIN_B, hair: DARK_BROWN, style: 'long', hat: 'scarf', hatColor: 0xe76f51 }, // 6 a woman in a headscarf
+  { skin: SKIN_C, hair: 0x8a8a92, style: 'bun', hat: 'none', hatColor: 0, glasses: true }, // 7 a grandmother with glasses
+];
+
+const darker = (c: number): number => shade(c, -0.18);
+
+/** What is worn on the head, over the hair, seen from the front (`side` false) or from the side (the face looks right). */
+function drawHat(g: G, look: Look, hx: number, hy: number, R: number, s: number, side: boolean): void {
+  g.lineStyle(3, C.ink, 1);
+  const col = look.hatColor;
+  if (look.hat === 'cap') {
+    g.fillStyle(col, 1);
+    g.slice(hx, hy - 1, R + 1.5, Math.PI, 2 * Math.PI, false);
+    g.fillPath();
+    g.fillStyle(darker(col), 1);
+    if (side) g.fillRoundedRect(hx + 2, hy - 6 * s, R + 10, 5, 2);
+    else g.fillRoundedRect(hx - R * 0.8, hy - 5 * s, R * 1.6, 5, 2);
+  } else if (look.hat === 'kalpak') {
+    // a tall white felt hat with a black band
+    g.fillStyle(col, 1);
+    g.fillPoints(
+      [
+        new Phaser.Math.Vector2(hx - R * 0.95, hy - R * 0.55),
+        new Phaser.Math.Vector2(hx + R * 0.95, hy - R * 0.55),
+        new Phaser.Math.Vector2(hx + R * 0.62, hy - R * 1.75),
+        new Phaser.Math.Vector2(hx - R * 0.62, hy - R * 1.75),
+      ],
+      true,
+    );
+    g.strokePoints(
+      [
+        new Phaser.Math.Vector2(hx - R * 0.95, hy - R * 0.55),
+        new Phaser.Math.Vector2(hx + R * 0.95, hy - R * 0.55),
+        new Phaser.Math.Vector2(hx + R * 0.62, hy - R * 1.75),
+        new Phaser.Math.Vector2(hx - R * 0.62, hy - R * 1.75),
+      ],
+      true,
+      true,
+    );
+    g.fillStyle(C.ink, 1);
+    g.fillRoundedRect(hx - R * 1.0, hy - R * 0.75, R * 2.0, 6 * s, 3);
+  } else if (look.hat === 'tubeteika') {
+    // a small round embroidered skullcap
+    g.fillStyle(col, 1);
+    g.slice(hx, hy - 1, R + 1.5, Math.PI * 1.04, Math.PI * 1.96, false);
+    g.fillPath();
+    g.fillStyle(0xffffff, 1);
+    for (let k = 0; k < 5; k++) g.fillTriangle(hx - R * 0.8 + k * R * 0.4, hy - R * 0.55, hx - R * 0.6 + k * R * 0.4, hy - R * 0.55, hx - R * 0.7 + k * R * 0.4, hy - R * 0.85);
+    g.fillStyle(0xffd23f, 1);
+    g.fillRect(hx - R * 0.9, hy - R * 0.55, R * 1.8, 3);
+  } else if (look.hat === 'scarf') {
+    // a headscarf: over the head, framing the face, tied at the back
+    g.fillStyle(col, 1);
+    g.slice(hx, hy - 1, R + 2.5, Math.PI, 2 * Math.PI, false);
+    g.fillPath();
+    if (side) {
+      g.fillRoundedRect(hx - R - 4 * s, hy - 4 * s, 9 * s, R * 1.5, 5);
+      g.fillStyle(darker(col), 1);
+      g.fillCircle(hx - R - 2 * s, hy + R * 0.8, 4 * s);
+    } else {
+      g.fillRoundedRect(hx - R - 3 * s, hy - 3 * s, 6 * s, R * 1.4, 4);
+      g.fillRoundedRect(hx + R - 3 * s, hy - 3 * s, 6 * s, R * 1.4, 4);
+    }
+    g.fillStyle(0xffffff, 0.7);
+    for (const [dx, dy] of [[-0.5, -1.0], [0.1, -1.3], [0.6, -0.9]] as const) g.fillCircle(hx + dx * R, hy + dy * R, 1.8);
+  } else if (look.hat === 'bow') {
+    g.fillStyle(col, 1);
+    const bx = side ? hx - R * 0.6 : hx + R * 0.7;
+    const by = hy - R * 0.95;
+    g.fillTriangle(bx, by, bx - 9 * s, by - 6 * s, bx - 9 * s, by + 6 * s);
+    g.fillTriangle(bx, by, bx + 9 * s, by - 6 * s, bx + 9 * s, by + 6 * s);
+    g.fillStyle(darker(col), 1);
+    g.fillCircle(bx, by, 2.5 * s);
+  }
+}
+
+/** Head seen from the front: round face, almond eyes with brows, a small nose, a smile and rosy cheeks. */
+function drawHeadFront(g: G, i: number, cx: number, hy: number, R: number, s: number): void {
+  const look = LOOKS[i % LOOKS.length]!;
+  g.lineStyle(3, C.ink, 1);
+  // hair behind the head: long hair falls to the shoulders
+  g.fillStyle(look.hair, 1);
+  if (look.style === 'long' && look.hat !== 'scarf') {
+    // long hair falls on both sides of the face (never across the chest)
+    for (const x of [cx - R - 5 * s, cx + R - 2 * s]) {
+      g.fillRoundedRect(x, hy - R * 0.3, 7 * s, R * 1.9, 4 * s);
+      g.strokeRoundedRect(x, hy - R * 0.3, 7 * s, R * 1.9, 4 * s);
+    }
+  }
+  // face and ears
+  g.fillStyle(shade(look.skin, -0.1), 1);
+  g.fillCircle(cx - R, hy + 2 * s, 3.4 * s);
+  g.fillCircle(cx + R, hy + 2 * s, 3.4 * s);
+  g.fillStyle(look.skin, 1);
+  g.fillEllipse(cx, hy, 2 * R, 2.1 * R);
+  g.strokeEllipse(cx, hy, 2 * R, 2.1 * R);
+  // hair on top with a fringe; a bun on top for some
+  if (look.hat !== 'kalpak' && look.hat !== 'tubeteika') {
+    g.fillStyle(look.hair, 1);
+    if (look.style === 'bun') g.fillCircle(cx, hy - R * 1.0, 6 * s);
+    g.slice(cx, hy - 1, R + 1.5, Math.PI, 2 * Math.PI, false);
+    g.fillPath();
+    g.fillPoints(
+      [
+        new Phaser.Math.Vector2(cx - R + 1, hy - 2),
+        new Phaser.Math.Vector2(cx + R - 1, hy - 2),
+        new Phaser.Math.Vector2(cx + R * 0.45, hy - R * 0.28),
+        new Phaser.Math.Vector2(cx - R * 0.05, hy - R * 0.12),
+        new Phaser.Math.Vector2(cx - R * 0.55, hy - R * 0.3),
+      ],
+      true,
+    );
+    g.fillStyle(0xffffff, 0.18);
+    g.fillEllipse(cx - R * 0.35, hy - R * 0.72, R * 0.7, R * 0.22); // a shine on the hair
+  }
+  drawHat(g, look, cx, hy, R, s, false);
+  // almond eyes (a little lifted at the outer corners), brows, nose, mouth, cheeks
+  for (const sign of [-1, 1]) {
+    const ex = cx + sign * R * 0.4;
+    const ey = hy + 3 * s;
+    g.fillStyle(C.ink, 1);
+    // the outer corner is lifted: mirrored for the right eye
+    const eye = [[-4.2, 0.9], [-1.4, -2.2], [4.4, -1.8], [1.8, 2.3]] as const;
+    g.fillPoints(eye.map(([dx, dy]) => new Phaser.Math.Vector2(ex + sign * dx * s, ey + dy * s)), true);
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(ex + sign * 0.6 * s, ey - 0.6 * s, 1.1 * s);
+    g.lineStyle(2, look.hair === 0x8a8a92 ? 0x6b6b72 : look.hair, 1);
+    g.lineBetween(ex - 4 * s, ey - 4.5 * s, ex + 4 * s, ey - 5 * s);
+    g.fillStyle(0xf28482, 0.5);
+    g.fillCircle(cx + sign * R * 0.66, hy + 8 * s, 3 * s);
+  }
+  g.lineStyle(2, darker(look.skin), 1);
+  g.lineBetween(cx - 0.5, hy + 5.5 * s, cx + 0.5, hy + 8 * s);
+  g.lineStyle(2, C.ink, 1);
+  g.beginPath();
+  g.arc(cx, hy + 8.5 * s, 3.6 * s, 0.4, Math.PI - 0.4);
+  g.strokePath();
+  if (look.glasses) {
+    g.lineStyle(2, C.ink, 1);
+    g.strokeCircle(cx - R * 0.4, hy + 3 * s, 5.2 * s);
+    g.strokeCircle(cx + R * 0.4, hy + 3 * s, 5.2 * s);
+    g.lineBetween(cx - R * 0.4 + 5.2 * s, hy + 3 * s, cx + R * 0.4 - 5.2 * s, hy + 3 * s);
+  }
+}
+
+/** Head seen from the side (looking right): a rounded skull and chin, a small nose, an ear, an almond eye. */
+function drawHeadSide(g: G, i: number, hx: number, hy: number, R: number, s: number): void {
+  const look = LOOKS[i % LOOKS.length]!;
+  g.lineStyle(3, C.ink, 1);
+  // hair behind the head
+  g.fillStyle(look.hair, 1);
+  if (look.style === 'long' && look.hat !== 'scarf') {
+    g.fillRoundedRect(hx - R - 5 * s, hy - R * 0.6, R * 1.3, R * 2.3, 8 * s);
+    g.strokeRoundedRect(hx - R - 5 * s, hy - R * 0.6, R * 1.3, R * 2.3, 8 * s);
+  }
+  if (look.style === 'ponytail') {
+    g.fillRoundedRect(hx - R - 10 * s, hy - 3 * s, 14 * s, 8 * s, 4);
+    g.strokeRoundedRect(hx - R - 10 * s, hy - 3 * s, 14 * s, 8 * s, 4);
+  }
+  if (look.style === 'bun') g.fillCircle(hx - R * 0.75, hy - R * 0.95, 6 * s);
+  // a small soft nose first, then the skull over its inner half so only the bump shows
+  g.fillStyle(look.skin, 1);
+  g.fillCircle(hx + R - 0.5, hy + 4 * s, 3 * s);
+  g.strokeCircle(hx + R - 0.5, hy + 4 * s, 3 * s);
+  g.fillEllipse(hx + 1, hy + 1, 2 * R, 2.15 * R);
+  g.strokeEllipse(hx + 1, hy + 1, 2 * R, 2.15 * R);
+  g.fillStyle(shade(look.skin, -0.12), 1);
+  g.fillCircle(hx - 3 * s, hy + 2 * s, 3.4 * s); // ear
+  g.fillStyle(shade(look.skin, -0.3), 1);
+  g.fillCircle(hx - 3 * s, hy + 2 * s, 1.6 * s);
+  // hair on top and a fringe
+  if (look.hat !== 'kalpak' && look.hat !== 'tubeteika' && look.hat !== 'scarf') {
+    g.fillStyle(look.hair, 1);
+    g.slice(hx - 1, hy - 1, R + 1.5, Math.PI * 0.9, 2 * Math.PI, false);
+    g.fillPath();
+    g.fillPoints(
+      [
+        new Phaser.Math.Vector2(hx + R - 1, hy - 3 * s),
+        new Phaser.Math.Vector2(hx + R * 0.25, hy - R * 0.98),
+        new Phaser.Math.Vector2(hx - R * 0.45, hy - R * 0.5),
+        new Phaser.Math.Vector2(hx + R * 0.35, hy - 1 * s),
+      ],
+      true,
+    );
+    g.fillRect(hx - R - 1, hy - 3 * s, 5 * s, 7 * s);
+    g.fillStyle(0xffffff, 0.18);
+    g.fillEllipse(hx - R * 0.15, hy - R * 0.8, R * 0.8, R * 0.22);
+  }
+  drawHat(g, look, hx, hy, R, s, true);
+  // an almond eye with a lid line, a brow, a little mouth and a rosy cheek
+  const ex = hx + 7 * s;
+  const ey = hy + 3 * s;
+  g.fillStyle(C.ink, 1);
+  g.fillPoints(
+    [
+      new Phaser.Math.Vector2(ex - 3.6 * s, ey + 0.8),
+      new Phaser.Math.Vector2(ex - 1 * s, ey - 1.5 * s),
+      new Phaser.Math.Vector2(ex + 2.2 * s, ey - 1.4 * s),
+      new Phaser.Math.Vector2(ex + 3.8 * s, ey - 0.4),
+      new Phaser.Math.Vector2(ex + 1.4 * s, ey + 1.6 * s),
+      new Phaser.Math.Vector2(ex - 1.4 * s, ey + 1.7 * s),
+    ],
+    true,
+  );
+  g.lineStyle(2, look.hair === 0x8a8a92 ? 0x6b6b72 : look.hair, 1);
+  g.lineBetween(ex - 3 * s, ey - 4.5 * s, ex + 4 * s, ey - 4 * s);
+  g.lineStyle(2, C.ink, 1);
+  g.beginPath();
+  g.arc(hx + 6 * s, hy + 8.6 * s, 3 * s, 0.5, 1.7);
+  g.strokePath();
+  g.fillStyle(0xf28482, 0.5);
+  g.fillCircle(hx + 3 * s, hy + 7 * s, 3 * s);
+  if (look.glasses) {
+    g.lineStyle(2, C.ink, 1);
+    g.strokeCircle(ex, ey, 5.2 * s);
+    g.lineBetween(ex - 5.2 * s, ey, hx - 3 * s, ey);
+  }
+}
+
 /** Little people. Feet at the bottom centre of a 64×120 texture. */
 function passengers(scene: Phaser.Scene): void {
   const rng = mulberry32(99);
   const shirts = [C.red, C.blue, C.green, C.orange, C.purple, 0xf15bb5, 0x2ec4b6, C.yellow];
-  const skins = [0xf6d5b8, 0xe8b894, 0xc68e64, 0x8d5a3b];
-  const hairs = [0x2d2a32, 0x6b3e26, 0xc58b3c, 0x9c4a2f, 0x8a8a8a];
   for (let i = 0; i < PASSENGER_VARIANTS; i++) {
     const pants = pick(rng, [0x3d405b, 0x2d2a32, 0x6d597a]);
     for (const seated of [false, true]) {
@@ -287,34 +531,9 @@ function passengers(scene: Phaser.Scene): void {
     g.fillStyle(shade(shirt, -0.15), 1);
     g.fillRoundedRect(cx - 22 * s, bodyTop + 6, 8 * s, 30 * s, 4);
     g.fillRoundedRect(cx + 14 * s, bodyTop + 6, 8 * s, 30 * s, 4);
-    // head
-    const skin = skins[i % skins.length]!;
+    // head: round face, almond eyes, a fringe of dark hair, a hat for some
     const hy = bodyTop - headR + 2;
-    g.fillStyle(skin, 1);
-    g.fillCircle(cx, hy, headR);
-    g.strokeCircle(cx, hy, headR);
-    // hair or hat
-    if (i % 4 === 1) {
-      g.fillStyle(C.red, 1);
-      g.slice(cx, hy - 2, headR + 1, Math.PI, 0, false);
-      g.fillPath();
-      g.fillRect(cx, hy - 4, headR + 8, 5);
-    } else {
-      g.fillStyle(hairs[i % hairs.length]!, 1);
-      g.slice(cx, hy - 1, headR + 1, Math.PI, 0, false);
-      g.fillPath();
-    }
-    // face
-    g.fillStyle(C.ink, 1);
-    g.fillCircle(cx - 5 * s, hy + 2, 2.2);
-    g.fillCircle(cx + 5 * s, hy + 2, 2.2);
-    g.lineStyle(2, C.ink, 1);
-    g.beginPath();
-    g.arc(cx, hy + 5, 5 * s, 0.3, Math.PI - 0.3);
-    g.strokePath();
-    g.fillStyle(0xf28482, 0.6);
-    g.fillCircle(cx - 9 * s, hy + 6, 3);
-    g.fillCircle(cx + 9 * s, hy + 6, 3);
+    drawHeadFront(g, i, cx, hy, headR, s);
     g.generateTexture(seated ? `paxSit${i}` : `pax${i}`, 64, 120);
     g.destroy();
     }
@@ -349,22 +568,19 @@ const away = (from: Pt, deg: number, len: number): Pt => ({ x: from.x + Math.sin
 function sidePeople(scene: Phaser.Scene): void {
   const rng = mulberry32(99);
   const shirts = [C.red, C.blue, C.green, C.orange, C.purple, 0xf15bb5, 0x2ec4b6, C.yellow];
-  const skins = [0xf6d5b8, 0xe8b894, 0xc68e64, 0x8d5a3b];
-  const hairs = [0x2d2a32, 0x6b3e26, 0xc58b3c, 0x9c4a2f, 0x8a8a8a];
   const SHOES = [0xffffff, C.ink, 0xe63946, 0xf6d5b8];
   for (let i = 0; i < PASSENGER_VARIANTS; i++) {
     const pants = pick(rng, [0x3d405b, 0x2d2a32, 0x6d597a]); // the same trousers as the front view
     const kid = i % 3 === 2;
     const s = kid ? 0.78 : 1;
     const shirt = shirts[i % shirts.length]!;
-    const skin = skins[i % skins.length]!;
-    const hair = hairs[i % hairs.length]!;
+    const skin = LOOKS[i % LOOKS.length]!.skin;
     const outfit = i % 4; // 0 T-shirt, 1 jacket, 2 dress, 3 rucksack
     const shoe = SHOES[i % SHOES.length]!;
     const thigh = 17 * s;
     const shin = 17 * s;
     const torsoH = 38 * s;
-    const headR = 13 * s;
+    const headR = 14 * s;
 
     for (let k = 0; k < WALK_FRAMES; k++) {
       const g = make(scene);
@@ -476,50 +692,7 @@ function sidePeople(scene: Phaser.Scene): void {
       g.fillStyle(skin, 1);
       g.lineStyle(3, C.ink, 1);
       g.fillRect(hx - 4 * s, top.y - 6 * s, 8 * s, 9 * s);
-      // hair behind the head (long hair, ponytail, bun) goes first
-      const style = i % 8;
-      g.fillStyle(hair, 1);
-      if (style === 2) g.fillRoundedRect(hx - headR - 4 * s, hy - headR * 0.6, headR * 1.2, headR * 2.6, 8 * s); // long hair
-      if (style === 3) {
-        g.fillRoundedRect(hx - headR - 9 * s, hy - 2 * s, 12 * s, 7 * s, 4); // ponytail
-        g.strokeRoundedRect(hx - headR - 9 * s, hy - 2 * s, 12 * s, 7 * s, 4);
-      }
-      if (style === 7) g.fillCircle(hx - headR * 0.8, hy - headR * 0.9, 6 * s); // bun
-      g.fillStyle(skin, 1);
-      g.fillCircle(hx, hy, headR);
-      g.strokeCircle(hx, hy, headR);
-      g.fillCircle(hx + headR - 1, hy + 3 * s, 3.4 * s); // nose
-      g.strokeCircle(hx + headR - 1, hy + 3 * s, 3.4 * s);
-      g.fillStyle(shade(skin, -0.12), 1); // ear
-      g.fillCircle(hx - 3 * s, hy + 2 * s, 3.4 * s);
-      // hair on top, or a cap
-      if (style === 1 || style === 6) {
-        const cap = style === 1 ? C.red : C.blue;
-        g.fillStyle(cap, 1);
-        g.slice(hx, hy - 1, headR + 1.5, Math.PI * 1.0, Math.PI * 2.0, false);
-        g.fillPath();
-        g.fillRoundedRect(hx + 2, hy - 6 * s, headR + 9, 5, 2); // the peak
-        g.strokeRoundedRect(hx + 2, hy - 6 * s, headR + 9, 5, 2);
-      } else if (style === 4) {
-        g.fillStyle(hair, 1);
-        for (const [dx, dy] of [[-8, -8], [-1, -13], [7, -9], [-12, -1]] as const) g.fillCircle(hx + dx * s, hy + dy * s, 7 * s); // curls
-      } else {
-        g.fillStyle(hair, 1);
-        g.slice(hx - 1, hy - 1, headR + 1.5, Math.PI * 0.9, Math.PI * 2.0, false);
-        g.fillPath();
-        g.fillRect(hx - headR - 1, hy - 3 * s, 5 * s, 7 * s); // sideburn at the back
-      }
-      // face: an eye with a bright spot, a small mouth, a rosy cheek
-      g.fillStyle(C.ink, 1);
-      g.fillEllipse(hx + 6 * s, hy + 1 * s, 3.6, 5);
-      g.fillStyle(0xffffff, 1);
-      g.fillCircle(hx + 6.8 * s, hy - 0.4 * s, 0.9);
-      g.lineStyle(2, C.ink, 1);
-      g.beginPath();
-      g.arc(hx + 5 * s, hy + 6 * s, 3.5 * s, 0.35, 1.6);
-      g.strokePath();
-      g.fillStyle(0xf28482, 0.55);
-      g.fillCircle(hx + 3 * s, hy + 6 * s, 2.8 * s);
+      drawHeadSide(g, i, hx, hy, headR, s);
 
       g.generateTexture(`side${i}_${k}`, 64, 120);
       g.destroy();
